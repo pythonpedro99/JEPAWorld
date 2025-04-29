@@ -1,4 +1,1 @@
-[submodule "external/miniworld"]
-	path = external/miniworld
-	url = https://github.com/Farama-Foundation/Miniworld.git
-	branch = master
+
