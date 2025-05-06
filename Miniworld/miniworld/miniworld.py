@@ -470,8 +470,8 @@ class MiniWorldEnv(gym.Env):
     def __init__(
         self,
         max_episode_steps: int = 1500,
-        obs_width: int = 80,
-        obs_height: int = 60,
+        obs_width: int = 224,
+        obs_height: int = 224,
         window_width: int = 800,
         window_height: int = 600,
         params=DEFAULT_PARAMS,
