@@ -15,9 +15,7 @@ import networkx as nx
 import numpy as np
 from scipy.interpolate import splprep, splev
 from shapely.geometry import LineString, Point, Polygon
-from utils.policy import plot_prm_graph
-from Miniworld.miniworld.manual_control import ManualControl
-
+from utils.plot_prm_graph import plot_prm_graph
 MINIWORLD_PATH = os.path.expanduser("../MiniWorld")
 if MINIWORLD_PATH not in sys.path:
     sys.path.append(MINIWORLD_PATH)
