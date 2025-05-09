@@ -1,9 +1,18 @@
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon as MplPolygon, Circle
 from typing import Dict, List, Optional, Tuple
-
+from pathlib import Path
+from typing import Union, Sequence
+from PIL import Image
+import numpy as np
 import networkx as nx
 from shapely.geometry import Point, Polygon
+from pathlib import Path
+from typing import Union, Tuple
+from datetime import datetime
+
+import numpy as np
+from PIL import Image
 
 
 def plot_prm_graph(
@@ -99,3 +108,63 @@ def plot_prm_graph(
     ax.legend(by_label.values(), by_label.keys())
 
     plt.show()
+
+
+def save_data_batch(
+    obs_list: Sequence[np.ndarray],
+    action_list: Sequence,
+    base_dir: Union[str, Path]
+) -> None:
+    """
+    Save a batch of RGB images and their corresponding actions.
+
+    Images are written as PNGs under `base_dir/images/`
+    Actions are written as .npy files under `base_dir/actions/`
+
+    Args:
+        obs_list:    A sequence of H×W×3 uint8 RGB arrays (or floats in [0,1]).
+        action_list: A sequence of array‐like or scalar actions (one per obs).
+        base_dir:    Directory where “images/” and “actions/” folders will be created.
+
+    Returns:
+        A list of (image_path, action_path) tuples for each saved pair.
+    """
+    if len(obs_list) != len(action_list):
+        raise ValueError(f"Expected same length for obs_list and action_list, "
+                         f"got {len(obs_list)} vs {len(action_list)}")
+
+    base = Path(base_dir)
+    img_dir = base / "images"
+    act_dir = base / "actions"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    act_dir.mkdir(parents=True, exist_ok=True)
+
+    # Common timestamp stem
+    stem_base = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    saved_paths = []
+
+    for idx, (obs, action) in enumerate(zip(obs_list, action_list), start=1):
+        # 1) Convert floats → uint8
+        if np.issubdtype(obs.dtype, np.floating):
+            obs = (obs * 255).clip(0, 255).astype(np.uint8)
+
+        # 2) Shape sanity check
+        if obs.ndim != 3 or obs.shape[2] != 3:
+            raise ValueError(f"Expected H×W×3 array for obs #{idx}, got shape {obs.shape}")
+
+        # 3) Unique stem per item
+        stem = f"{stem_base}_{idx:03d}"
+
+        # 4) Save image
+        img_path = img_dir / f"{stem}.png"
+        Image.fromarray(obs).save(img_path)
+
+        # 5) Save action
+        act_path = act_dir / f"{stem}.npy"
+        np.save(act_path, action)
+
+        saved_paths.append((str(img_path), str(act_path)))
+
+    return None
+
+
