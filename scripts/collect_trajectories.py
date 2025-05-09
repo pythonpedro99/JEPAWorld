@@ -6,7 +6,7 @@ import miniworld.envs
 import networkx as nx
 import numpy as np
 from shapely.geometry import LineString, Point, Polygon
-from helpers import plot_prm_graph
+from scripts.helpers import plot_prm_graph
 from policies.expert import ExpertPolicy
 from policies.helpers import GraphData,Agent, Obstacle, Room, Portal
 
@@ -20,19 +20,20 @@ class CollectTrajectories:
         self.env.reset()
         self.mission = ["Box_0"]
         self.graph_data = self.get_graph_data()
-        self.graph, self.node_positions, self.obstacle_nodes = self.build_prm_graph(
+        self.graph, self.node_positions, self.nodes = self.build_prm_graph(
             sample_density=1.0, k_neighbors=10, jitter_ratio=0.0, min_samples=5
         )
 
-        policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obsticals).solve_mission
+        expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission)
+        expert_policy.solve_mission()
   
         plot_prm_graph(
             self.graph_data,
             self.graph,
             self.node_positions,
-            self.obstacle_nodes,
-            highlight_path= policy.path,
-            smoothed_curve= policy.smoothed_path
+            self.nodes,
+            highlight_path= expert_policy.path,
+            smoothed_curve= expert_policy.smoothed_waypoints
         )
 
     # Functions 
@@ -196,3 +197,5 @@ class CollectTrajectories:
         )
 
 
+if __name__ == "__main__":
+    CollectTrajectories()
