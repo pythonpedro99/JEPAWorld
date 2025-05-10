@@ -104,3 +104,14 @@ def smooth_path(pts, iterations=3):
             new_path.append(path[-1])
             path = new_path
         return path
+
+def get_lookahead_point(path_pts, pos, L):
+    cum = 0
+    last = np.array(pos)
+    for pt in path_pts:
+        nxt = np.array(pt)
+        cum += np.linalg.norm(nxt - last)
+        if cum >= L:
+            return nxt
+        last = nxt
+    return path_pts[-1]

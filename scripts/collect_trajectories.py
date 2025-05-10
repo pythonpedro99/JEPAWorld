@@ -21,7 +21,7 @@ class CollectTrajectories:
         self.mission = ["Box_0"]
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=1.0, k_neighbors=10, jitter_ratio=0.0, min_samples=5
+            sample_density=1.0, k_neighbors=10, jitter_ratio=0.0, min_samples=4, min_dist=0.7
         )
 
         expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission)
@@ -86,35 +86,28 @@ class CollectTrajectories:
         return GraphData(rooms, agent, obstacles)
     
     def build_prm_graph(
-        self,
-        sample_density: float = 0.05,
-        k_neighbors: int = 15,
-        jitter_ratio: float = 0.3,
-        min_samples: int = 5,
-    ) -> Tuple[nx.Graph, Dict[str, Tuple[float, float]], List[str]]:
+    self,
+    sample_density: float = 0.05,
+    k_neighbors: int = 15,
+    jitter_ratio: float = 0.3,
+    min_samples: int = 5,
+    min_dist: float = 0.2,          # <— neuer Parameter: Mindestabstand zu Wänden/Polygonrand
+) -> Tuple[nx.Graph, Dict[str, Tuple[float, float]], List[str]]:
         """
-        Constructs a probabilistic roadmap graph from environment data.
-
-        Args:
-            data: GraphData with rooms, agent, and obstacles.
-            sample_density: Number of samples per unit area.
-            k_neighbors: Neighbors per sample for connections.
-            jitter_ratio: Random offset ratio within grid cells.
-            min_samples: Minimum samples per room.
-
-        Returns:
-            graph: The constructed NetworkX graph.
-            node_positions: Mapping from node IDs to 2D coordinates.
-            obstacle_nodes: List of obstacle node names.
+        Constructs a probabilistic roadmap graph from environment data,
+        ensuring that all samples lie at least `min_dist` away from room boundaries.
         """
         graph = nx.Graph()
         room_polygons = {r.id: Polygon(r.vertices) for r in self.graph_data.rooms}
         obstacle_buffers = {
-            obs.node_name: Point(*obs.pos).buffer(obs.radius)
-            for obs in self.graph_data.obstacles
-        }
+        obs.node_name: Point(*obs.pos).buffer(
+                max(obs.radius*2, 0.5)
+                   )
+                for obs in self.graph_data.obstacles
+       }
         node_positions: Dict[str, Tuple[float, float]] = {}
 
+        # Portale und Agent/Obstacles wie bisher
         for room in self.graph_data.rooms:
             for idx, p in enumerate(room.portals):
                 node_positions[f"r{room.id}_p{idx}"] = p.midpoint
@@ -122,13 +115,22 @@ class CollectTrajectories:
         for obs in self.graph_data.obstacles:
             node_positions[obs.node_name] = obs.pos
 
+        # ——— Hier beginnt das Sampling, angepasst um den Shrink ———
         for room in self.graph_data.rooms:
             poly = room_polygons[room.id]
+            # 1) Schrumpfe das Polygon um min_dist
+            inner_poly = poly.buffer(-min_dist)
+            if inner_poly.is_empty:
+                # Fallback: wenn zu stark geschrumpft, nutze das Original
+                inner_poly = poly
+
+            # 2) Wie viele Samples?
             n_samples = max(min_samples, int(poly.area * sample_density))
             grid = max(1, int(np.sqrt(n_samples)))
-            minx, miny, maxx, maxy = poly.bounds
+            minx, miny, maxx, maxy = inner_poly.bounds
             dx, dy = (maxx - minx) / grid, (maxy - miny) / grid
             count = 0
+
             for i in range(grid):
                 for j in range(grid):
                     if count >= n_samples:
@@ -138,17 +140,19 @@ class CollectTrajectories:
                     x = cx + (random.random() - 0.5) * dx * jitter_ratio
                     y = cy + (random.random() - 0.5) * dy * jitter_ratio
                     pt = Point(x, y)
-                    if not poly.covers(pt):
+
+                    # 3) Prüfe gegen das geschrumpfte Polygon
+                    if not inner_poly.covers(pt):
                         continue
+                    # 4) Prüfe gegen Hindernisse wie bisher
                     if any(buf.contains(pt) for buf in obstacle_buffers.values()):
                         continue
+
                     node_positions[f"r{room.id}_s{count}"] = (x, y)
                     count += 1
+        # ——— Sampling Ende ———
 
         def room_of(point: Tuple[float, float]) -> Optional[int]:
-            """
-            Determines which room contains a given point.
-            """
             for rid, poly in room_polygons.items():
                 if poly.covers(Point(point)):
                     return rid
@@ -156,6 +160,7 @@ class CollectTrajectories:
 
         agent_room = room_of(self.graph_data.agent.pos)
 
+        # Kanten verbinden wie bisher
         for rid, poly in room_polygons.items():
             nodes_in_room = [
                 name
@@ -164,14 +169,11 @@ class CollectTrajectories:
                 and not (name == "agent" and agent_room != rid)
             ]
             for n in nodes_in_room:
-                x1, y1 = node_positions[n]
-                # ——— Start of fix ———
-                pos_n = np.array((x1, y1))
+                pos_n = np.array(node_positions[n])
                 dists: List[Tuple[str, float]] = []
                 for m in nodes_in_room:
                     if m == n:
                         continue
-                    # skip direct portal→portal connections
                     if n.startswith(f"r{rid}_p") and m.startswith(f"r{rid}_p"):
                         continue
                     pos_m = np.array(node_positions[m])
@@ -179,7 +181,6 @@ class CollectTrajectories:
                     dists.append((m, dist_sq))
                 dists.sort(key=lambda t: t[1])
                 for m, _ in dists[:k_neighbors]:
-                    # ———  End of fix  ———
                     seg = LineString([node_positions[n], node_positions[m]])
                     if not poly.covers(seg):
                         continue
@@ -195,6 +196,7 @@ class CollectTrajectories:
             node_positions,
             [obs.node_name for obs in self.graph_data.obstacles],
         )
+
 
 
 if __name__ == "__main__":

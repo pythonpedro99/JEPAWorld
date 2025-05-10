@@ -15,7 +15,7 @@ import networkx as nx
 import numpy as np
 from scipy.interpolate import splprep, splev
 from shapely.geometry import LineString, Point, Polygon
-from policies.helpers import find_path, smooth_path
+from policies.helpers import find_path, smooth_path, get_lookahead_point
 from shapely.geometry import Point
 import numpy as np
 import random
@@ -58,84 +58,114 @@ class ExpertPolicy:
         self.smoothed_waypoints = []
         # Default values
         self.forward_step = 0.15
-        self.turn_step = np.deg2rad(15)
-        self.turn_tol = self.turn_step / 2
+        self.turn_step = np.deg2rad(5)
+        self.turn_tol = self.turn_step / 1.5
         self.chaikins_iterations = 3
         self.min_forward_prob = 0.1  # minimum forward-if-misaligned probability
         self.max_forward_prob = 0.5  # maximum forward-if-misaligned probability
-        self.CMD_TURN_RIGHT = 0
-        self.CMD_TURN_LEFT = 1
+        self.CMD_TURN_RIGHT = 1
+        self.CMD_TURN_LEFT = 0
         self.CMD_FORWARD = 2
         self.pause_prob = 0.1  # probability of pausing at each step
+        self.waypoint_tolerance = 0.2  # tolerance for reaching waypoints
+        self.lookahead_distance = 0.5  # distance to look ahead for the next waypoint
 
     def solve_mission(self) -> None:
         self.go_to(self.mission[0])
-        save_data_batch(self.obs, self.actions, "test_data")
+        self.pick_up()
+        save_data_batch(self.obs, self.actions, "/Users/julianquast/Documents/Bachelor Thesis/Datasets")
         return None
         # TODO: Implement the rest of the mission logic
+    
+   
 
     def go_to(self, goal: str) -> None:
-        # 1) Look up obstacle (if any) to get its radius; waypoints get 0.0
-        target_obs = next((o for o in self.obstacles if o.node_name == goal), None)
-        target_buffer = target_obs.radius if target_obs else 0.0
 
-        # 2) Plan & smooth
+        # 2) Plan path (no smoothing)
         path = find_path(self.graph, self.nodes, "Agent_6", goal)
         self.path += path
         waypoints = [self.node_positions[node] for node in path]
         self.waypoints += waypoints
-        smoothed_waypoints = smooth_path(waypoints, self.chaikins_iterations)
-        self.smoothed_waypoints += smoothed_waypoints
-        if not smoothed_waypoints:
+
+        if not waypoints:
+            print(f"[DEBUG] No waypoints for goal '{goal}'.")
             return
 
-        # 3) Precompute goal point
-        goal_pt = Point(smoothed_waypoints[-1][0], smoothed_waypoints[-1][1])
+        n_wp = len(waypoints)
+        #print(f"[DEBUG] Moving to goal '{goal}' via {n_wp} waypoints (final buffer={target_buffer}).")
+        target_obs = next((o for o in self.obstacles if o.node_name == goal), None)
+        target_buffer = target_obs.radius +0.6
+        print(f"[DEBUG] Target buffer: {target_buffer:.2f}m")
 
-        # 4) Walk the smoothed path
-        for gx, gy in smoothed_waypoints:
+        for idx, (wx,wy)  in enumerate(waypoints, start=1):
+            print(f"\n=== New goal: ({wx:.2f}, {wy:.2f}) ===")
+            buf = target_buffer if idx == len(waypoints) else self.waypoint_tolerance 
             while True:
-                # current agent position & heading
-                x, y = self.env.unwrapped.agent.pos[0], self.env.unwrapped.agent.pos[2]
-                yaw = self.env.unwrapped.agent.dir
-                curr_pt = Point(x, y)
+                # current pose
+                x, y    = self.env.unwrapped.agent.pos[0], self.env.unwrapped.agent.pos[2]
+                yaw_rad = self.env.unwrapped.agent.dir
+                # normalize yaw into [0,360)
+                yaw_deg = (np.degrees(yaw_rad) + 360) % 360
 
-                # a) If within buffer (or exactly at the point when buffer=0), we’re done with this waypoint
-                if curr_pt.distance(goal_pt) <= target_buffer:
+                # vector to goal
+                dx, dy = wx - x, wy - y
+                dist   = np.hypot(dx, dy)
+                if dist < buf:
+                    print(f"[DEBUG] Reached goal: pos=({x:.2f},{y:.2f}) dist={dist:.3f}m\n")
                     break
 
-                # b) Maybe pause
-                if random.random() < self.pause_prob:
-                    time.sleep(random.uniform(0.1, 0.3))
+                # compute desired heading & error
+                desired_rad = np.arctan2(-dy, dx)
+                desired_deg = (np.degrees(desired_rad) + 360) % 360
 
-                # c) Compute control
-                desired = np.arctan2(-(gy - y), (gx - x))
-                err = ((desired - yaw + np.pi) % (2 * np.pi)) - np.pi
-                align = 1 - min(abs(err) / np.pi, 1)
-                fprob = (
-                    self.min_forward_prob
-                    + (self.max_forward_prob - self.min_forward_prob) * align
-                )
-                if abs(err) > self.turn_tol and random.random() > fprob:
-                    action = self.CMD_TURN_RIGHT if err > 0 else self.CMD_TURN_LEFT
-                else:
-                    action = self.CMD_FORWARD
+                # shortest error in [−180,180)
+                err_rad = ((desired_rad - yaw_rad + np.pi) % (2*np.pi)) - np.pi
+                err_deg = ((desired_deg - yaw_deg + 180) % 360) - 180
 
-                # d) Step & save
-                obs, _, term, trunc, _ = self.env.step(action)
-                self.actions.append(action)
+                # debug print
+                print(f"[DEBUG] pos=({x:.2f},{y:.2f})  yaw={yaw_deg:.1f}°  "
+                    f"target=({wx:.2f},{wy:.2f})  "
+                    f"dist={dist:.3f}m\n"
+                    f"        desired={desired_deg:.1f}°  err={err_deg:.1f}°  "
+                    f"(tol={np.degrees(self.turn_tol):.1f}°)")
+
+                # turn-in-place
+                if abs(err_rad) > self.turn_tol:
+                    cmd = 0 if err_rad > 0 else 1
+                    obs, _, term, trunc, _ = self.env.step(cmd)
+                    self.obs.append(obs)
+                    self.actions.append(cmd)
+                    if term or trunc:
+                        print("[DEBUG] Episode timeout.")
+                        return
+                    continue  # re-read pose & re-evaluate
+
+                # move forward
+                obs, _, term, trunc, _ = self.env.step(2)
                 self.obs.append(obs)
+                self.actions.append(cmd)
                 if term or trunc:
-                    print("[DEBUG] Episode terminated.")
+                    print("[DEBUG] Episode timeout.")
                     return
+                # loop back to re-fetch pose
 
-        print("[DEBUG] Completed smoothed path.")
+        
+        print("reached goal")
 
-    def pick_up():
+
+
+
+
+    def pick_up(self)-> None:
         """
         Pick up an object at the current agent position.
         """
-        pass
+        obs, _, term, trunc, _ = self.env.step(4)
+        self.obs.append(obs)
+        self.actions.append(4)
+        if term or trunc:
+            print("[DEBUG] Episode timeout.")
+        return
 
     def drop():
         """

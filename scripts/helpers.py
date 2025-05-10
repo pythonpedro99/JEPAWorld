@@ -116,18 +116,18 @@ def save_data_batch(
     base_dir: Union[str, Path]
 ) -> None:
     """
-    Save a batch of RGB images and their corresponding actions.
+    Save a batch of RGB images and all their corresponding actions in one CSV.
 
     Images are written as PNGs under `base_dir/images/`
-    Actions are written as .npy files under `base_dir/actions/`
+    All actions are written together in one CSV under `base_dir/actions/`
 
     Args:
         obs_list:    A sequence of H×W×3 uint8 RGB arrays (or floats in [0,1]).
         action_list: A sequence of array‐like or scalar actions (one per obs).
-        base_dir:    Directory where “images/” and “actions/” folders will be created.
+        base_dir:    Directory where `images/` and `actions/` folders will be created.
 
     Returns:
-        A list of (image_path, action_path) tuples for each saved pair.
+        A tuple of (list_of_image_paths, action_csv_path).
     """
     if len(obs_list) != len(action_list):
         raise ValueError(f"Expected same length for obs_list and action_list, "
@@ -141,29 +141,40 @@ def save_data_batch(
 
     # Common timestamp stem
     stem_base = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    saved_paths = []
 
-    for idx, (obs, action) in enumerate(zip(obs_list, action_list), start=1):
-        # 1) Convert floats → uint8
+    image_paths: List[str] = []
+
+    # 1) Save all images
+    for idx, obs in enumerate(obs_list, start=1):
+        # Convert floats → uint8
         if np.issubdtype(obs.dtype, np.floating):
             obs = (obs * 255).clip(0, 255).astype(np.uint8)
 
-        # 2) Shape sanity check
+        # Sanity check
         if obs.ndim != 3 or obs.shape[2] != 3:
             raise ValueError(f"Expected H×W×3 array for obs #{idx}, got shape {obs.shape}")
 
-        # 3) Unique stem per item
         stem = f"{stem_base}_{idx:03d}"
-
-        # 4) Save image
         img_path = img_dir / f"{stem}.png"
         Image.fromarray(obs).save(img_path)
+        image_paths.append(str(img_path))
 
-        # 5) Save action
-        act_path = act_dir / f"{stem}.npy"
-        np.save(act_path, action)
+    # 2) Stack all actions into one 2D array
+    #    Each action is flattened to one row
+    flat_actions = []
+    for idx, action in enumerate(action_list, start=1):
+        arr = np.atleast_1d(action).reshape(-1)
+        flat_actions.append(arr)
+    # Ensure all rows have same length
+    lengths = [a.size for a in flat_actions]
+    if len(set(lengths)) != 1:
+        raise ValueError(f"All actions must have the same size; got sizes {set(lengths)}")
+    action_matrix = np.vstack(flat_actions)
 
-        saved_paths.append((str(img_path), str(act_path)))
+    # 3) Save the single CSV
+    action_csv = act_dir / f"{stem_base}_actions.csv"
+    # one row per action, comma-delimited
+    np.savetxt(action_csv, action_matrix, delimiter=",", fmt="%s")
 
     return None
 
