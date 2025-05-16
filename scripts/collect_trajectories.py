@@ -18,10 +18,10 @@ class CollectTrajectories:
         # Basics 
         self.env = gym.make("MiniWorld-ThreeRooms-v0")
         self.env.reset()
-        self.mission = ["Box_0"]
+        self.mission = [("go_to","Box_0"),("go_to","Box_1")]
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=1.0, k_neighbors=10, jitter_ratio=0.0, min_samples=4, min_dist=0.7
+            sample_density=2.0, k_neighbors=10, jitter_ratio=0.0, min_samples=4, min_dist=0.7
         )
 
         expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission)

@@ -2,7 +2,15 @@ import math
 
 import pyglet
 from pyglet.window import key
+from imageio import imwrite
+from gymnasium.envs.registration import register
 
+register(
+    id="JEPAWorld-v2",
+    entry_point="miniworld.envs.jepa_world_v2:JEPAWorld",
+    max_episode_steps=500,
+    kwargs={"seed": 82},   # any default kwargs your ctor needs
+)
 
 class ManualControl:
     def __init__(self, env, no_time_limit: bool, domain_rand: bool):
@@ -21,7 +29,8 @@ class ManualControl:
         print("============")
 
         self.env.reset()
-
+        image = self.env.render_top_view()
+        imwrite('top_view.png', image.astype('uint8'))
         # Create the display window
         self.env.render()
 

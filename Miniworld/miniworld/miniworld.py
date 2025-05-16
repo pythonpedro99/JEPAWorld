@@ -78,12 +78,31 @@ DEFAULT_WALL_HEIGHT = 2.74
 # Texture size/density in texels/meter
 TEX_DENSITY = 512
 
+COLOR_TEXTURES = {
+        "matte_white":  (1.0, 1.0, 1.0),
+        "matte_grey":   (0.6, 0.6, 0.6),
+        "light_grey":   (0.8, 0.8, 0.8),
+        "warm_white":   (1.0, 0.98, 0.94),
+        "off_white":    (0.95, 0.95, 0.95),
+        "light_wood":   (0.87, 0.72, 0.53),
+        "dark_grey":    (0.4, 0.4, 0.4),
+        "sage_green":   (0.74, 0.82, 0.76),
+        "dusty_blue":   (0.65, 0.76, 0.89),
+        "soft_beige":   (0.96, 0.89, 0.76),
+        "terracotta":   (0.89, 0.52, 0.36),
+        "muted_olive":  (0.72, 0.75, 0.58),
+        "powder_pink":  (0.96, 0.80, 0.82),
+        "midnight_blue":(0.30, 0.34, 0.48),
+    }
+
 
 def gen_texcs_wall(tex, min_x, min_y, width, height):
     """
     Generate texture coordinates for a wall quad
     """
-
+    if isinstance(tex, tuple) and len(tex) == 3:
+        # produce 4 dummy texcoords so the rendering loop still iterates correctly
+        return np.zeros((4, 2), dtype=np.float32)
     xc = TEX_DENSITY / tex.width
     yc = TEX_DENSITY / tex.height
 
@@ -109,7 +128,9 @@ def gen_texcs_floor(tex, poss):
     This is done by mapping x,z positions directly to texture
     coordinates
     """
-
+    # if tex is a solid‐color RGB tuple, skip UVs entirely
+    if isinstance(tex, tuple) and len(tex) == 3:
+        return np.zeros((poss.shape[0], 2), dtype=np.float32)
     texc_mul = np.array(
         [TEX_DENSITY / tex.width, TEX_DENSITY / tex.height], dtype=float
     )
@@ -123,6 +144,8 @@ class Room:
     """
     Represent an individual room and its contents
     """
+    # near the top of miniworld/miniworld/miniworld.py
+    
 
     def __init__(
         self,
@@ -292,9 +315,38 @@ class Room:
         """
 
         # Load the textures and do texture randomization
-        self.wall_tex = Texture.get(self.wall_tex_name, rng)
-        self.floor_tex = Texture.get(self.floor_tex_name, rng)
-        self.ceil_tex = Texture.get(self.ceil_tex_name, rng)
+        # self.wall_tex = Texture.get(self.wall_tex_name, rng)
+        # self.floor_tex = Texture.get(self.floor_tex_name, rng)
+        # self.ceil_tex = Texture.get(self.ceil_tex_name, rng)
+
+        name = self.wall_tex_name
+        if isinstance(name, tuple) and len(name) == 3:
+            # direct RGB triplet
+            self.wall_tex = name
+        elif isinstance(name, str) and name in COLOR_TEXTURES:
+            # named matte color
+            self.wall_tex = COLOR_TEXTURES[name]
+        else:
+            # fallback to loading a PNG
+            self.wall_tex = Texture.get(name, rng)
+
+        # FLOOR
+        name = self.floor_tex_name
+        if isinstance(name, tuple) and len(name) == 3:
+            self.floor_tex = name
+        elif isinstance(name, str) and name in COLOR_TEXTURES:
+            self.floor_tex = COLOR_TEXTURES[name]
+        else:
+            self.floor_tex = Texture.get(name, rng)
+
+        # CEILING
+        name = self.ceil_tex_name
+        if isinstance(name, tuple) and len(name) == 3:
+            self.ceil_tex = name
+        elif isinstance(name, str) and name in COLOR_TEXTURES:
+            self.ceil_tex = COLOR_TEXTURES[name]
+        else:
+            self.ceil_tex = Texture.get(name, rng)
 
         # Generate the floor vertices
         self.floor_verts = self.outline
@@ -400,38 +452,59 @@ class Room:
 
     def _render(self):
         """
-        Render the static elements of the room
+        Render the static elements of the room, supporting solid‐color RGB tuples
+        and regular textures.
         """
+        # Reset to textured white
+        glEnable(GL_TEXTURE_2D)
+        glColor3f(1.0, 1.0, 1.0)
 
-        glColor3f(1, 1, 1)
-
-        # Draw the floor
-        self.floor_tex.bind()
+        # --- Floor ---
+        if isinstance(self.floor_tex, tuple) and len(self.floor_tex) == 3:
+            glDisable(GL_TEXTURE_2D)
+            glColor3f(*self.floor_tex)
+        else:
+            glEnable(GL_TEXTURE_2D)
+            self.floor_tex.bind()
         glBegin(GL_POLYGON)
         glNormal3f(0, 1, 0)
-        for i in range(self.floor_verts.shape[0]):
-            glTexCoord2f(*self.floor_texcs[i, :])
-            glVertex3f(*self.floor_verts[i, :])
+        for v, tc in zip(self.floor_verts, self.floor_texcs):
+            glTexCoord2f(*tc)
+            glVertex3f(*v)
         glEnd()
 
-        # Draw the ceiling
+        # --- Ceiling ---
         if not self.no_ceiling:
-            self.ceil_tex.bind()
+            if isinstance(self.ceil_tex, tuple) and len(self.ceil_tex) == 3:
+                glDisable(GL_TEXTURE_2D)
+                glColor3f(*self.ceil_tex)
+            else:
+                glEnable(GL_TEXTURE_2D)
+                self.ceil_tex.bind()
             glBegin(GL_POLYGON)
             glNormal3f(0, -1, 0)
-            for i in range(self.ceil_verts.shape[0]):
-                glTexCoord2f(*self.ceil_texcs[i, :])
-                glVertex3f(*self.ceil_verts[i, :])
+            for v, tc in zip(self.ceil_verts, self.ceil_texcs):
+                glTexCoord2f(*tc)
+                glVertex3f(*v)
             glEnd()
 
-        # Draw the walls
-        self.wall_tex.bind()
+        # --- Walls ---
+        if isinstance(self.wall_tex, tuple) and len(self.wall_tex) == 3:
+            glDisable(GL_TEXTURE_2D)
+            glColor3f(*self.wall_tex)
+        else:
+            glEnable(GL_TEXTURE_2D)
+            self.wall_tex.bind()
         glBegin(GL_QUADS)
-        for i in range(self.wall_verts.shape[0]):
-            glNormal3f(*self.wall_norms[i, :])
-            glTexCoord2f(*self.wall_texcs[i, :])
-            glVertex3f(*self.wall_verts[i, :])
+        for vert, norm, tc in zip(self.wall_verts, self.wall_norms, self.wall_texcs):
+            glNormal3f(*norm)
+            glTexCoord2f(*tc)
+            glVertex3f(*vert)
         glEnd()
+
+    # Restore textured white for subsequent draws
+    glEnable(GL_TEXTURE_2D)
+    glColor3f(1.0, 1.0, 1.0)
 
 
 class MiniWorldEnv(gym.Env):

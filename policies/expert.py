@@ -59,7 +59,7 @@ class ExpertPolicy:
         # Default values
         self.forward_step = 0.15
         self.turn_step = np.deg2rad(5)
-        self.turn_tol = self.turn_step / 1.5
+        self.turn_tol = self.turn_step 
         self.chaikins_iterations = 3
         self.min_forward_prob = 0.1  # minimum forward-if-misaligned probability
         self.max_forward_prob = 0.5  # maximum forward-if-misaligned probability
@@ -71,11 +71,31 @@ class ExpertPolicy:
         self.lookahead_distance = 0.5  # distance to look ahead for the next waypoint
 
     def solve_mission(self) -> None:
-        self.go_to(self.mission[0])
-        self.pick_up()
-        save_data_batch(self.obs, self.actions, "/Users/julianquast/Documents/Bachelor Thesis/Datasets")
-        return None
-        # TODO: Implement the rest of the mission logic
+        """
+        Execute self.mission, which should be a list of (action, target) tuples.
+        - action: one of "go_to", "pick_up", "put_down"/"drop", "toggle"
+        - target: for "go_to" either a node‐name (str) or an (x,y) tuple;
+                    ignored (None) for other actions.
+        """
+        for action, target in self.mission:
+            if action == "go_to":
+                # target can be a node‐name or a raw (x,y) coordinate
+                self.go_to(target)
+            elif action == "pick_up":
+                self.pick_up()
+            elif action in ("put_down", "drop"):
+                self.drop()
+            elif action == "toggle":
+                self.toggle()
+            else:
+                raise ValueError(f"[solve_mission] unknown action '{action}'")
+
+        # finally, dump the collected observations & actions
+        save_data_batch(
+            self.obs,
+            self.actions,
+            "/Users/julianquast/Documents/Bachelor Thesis/Datasets"
+        )
     
    
 
@@ -167,25 +187,35 @@ class ExpertPolicy:
             print("[DEBUG] Episode timeout.")
         return
 
-    def drop():
+    def drop(self):
         """
         Drop an object at the current agent position.
         """
-        pass
+        obs, _, term, trunc, _ = self.env.step(5)
+        self.obs.append(obs)
+        self.actions.append(5)
+        if term or trunc:
+            print("[DEBUG] Episode timeout.")
+        return
 
-    def toogle():
+    def toogle(self):
         """
         Toggle the state of an object at the current agent position.
         """
-        pass
+        obs, _, term, trunc, _ = self.env.step(6)
+        self.obs.append(obs)
+        self.actions.append(6)
+        if term or trunc:
+            print("[DEBUG] Episode timeout.")
+        return
 
-    def check_surroundings():
+    def check_surroundings(self):
         """
         Turn around the agent.
         """
         pass
 
-    def clear_way():
+    def clear_way(self):
         """
         Clear the way for the agent.
         """

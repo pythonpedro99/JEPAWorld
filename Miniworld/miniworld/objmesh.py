@@ -56,6 +56,8 @@ class ObjMesh:
 
         # Attempt to load the materials library
         materials = self._load_mtl(file_path)
+        #print("Materials loaded:", list(materials.keys()))
+
         mesh_file = open(file_path)
 
         verts = []
@@ -148,6 +150,8 @@ class ObjMesh:
             # Get the color for this face
             f_mtl = materials[mtl_name]
             f_color = f_mtl["Kd"] if f_mtl else np.array((1, 1, 1))
+            #print("Material color:", f_color)  # Print loaded RGB
+
 
             # For each tuple of indices
             for l_idx, indices in enumerate(face):
