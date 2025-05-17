@@ -58,7 +58,7 @@ class ThreeRooms(MiniWorldEnv, utils.EzPickle):
         self.connect_rooms(room0, room2, min_x=2.75, max_x=5.25)
 
         self.box = self.place_entity(Box(color="red"))
-        # self.yellow_box = self.place_entity(Box(color='yellow', size=[0.8, 1.2, 0.5]))
+        self.yellow_box = self.place_entity(Box(color='yellow', size=[0.8, 1.2, 0.5]))
         self.place_entity(Box(color="green", size=0.6))
 
         # Mila logo image on the wall

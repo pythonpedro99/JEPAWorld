@@ -9,7 +9,7 @@ register(
     id="JEPAWorld-v2",
     entry_point="miniworld.envs.jepa_world_v2:JEPAWorld",
     max_episode_steps=500,
-    kwargs={"seed": 82},   # any default kwargs your ctor needs
+    kwargs={"seed": 6},   # any default kwargs your ctor needs
 )
 
 class ManualControl:
