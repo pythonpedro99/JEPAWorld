@@ -9,31 +9,37 @@ from shapely.geometry import LineString, Point, Polygon
 from scripts.helpers import plot_prm_graph
 from policies.expert import ExpertPolicy
 from policies.helpers import GraphData,Agent, Obstacle, Room, Portal
-
+from gymnasium.envs.registration import register
+register(
+    id="JEPAWorld-v0",
+    entry_point="miniworld.envs.jepaworld:JEPAWorld",
+    max_episode_steps=500,
+    kwargs={"seed":6},   # any default kwargs your ctor needs;  random.randint(0, 2**31 - 1)
+)
 
 class CollectTrajectories:
     
     def __init__(self):
         
         # Basics 
-        self.env = gym.make("MiniWorld-ThreeRooms-v0")
+        self.env = gym.make("JEPAWorld-v0", seed=6)
         self.env.reset()
-        self.mission = [("go_to","Box_0"),("go_to","Box_1")]
+        #self.mission = [("got_to","")]
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
             sample_density=2.0, k_neighbors=10, jitter_ratio=0.0, min_samples=4, min_dist=0.7
         )
 
-        expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission)
-        expert_policy.solve_mission()
+        #expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission)
+        #expert_policy.solve_mission()
   
         plot_prm_graph(
             self.graph_data,
             self.graph,
             self.node_positions,
             self.nodes,
-            highlight_path= expert_policy.path,
-            smoothed_curve= expert_policy.smoothed_waypoints
+            #highlight_path= expert_policy.path,
+            #smoothed_curve= expert_policy.smoothed_waypoints
         )
 
     # Functions 

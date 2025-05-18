@@ -827,6 +827,66 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
             pos=(bed_x, 0.0, bed_z),
             dir=bed_dir
     )
+        
+    def _place_random_movables(self, rooms, n):
+        """
+        Pick n distinct movables, then for each:
+        • choose a random room from `rooms`
+        • sample up to max_tries random (x,z) positions inside its bounds
+        • test each candidate against all existing entities for overlap
+        • place it static=False as soon as you find a free spot—or warn and skip
+        """
+        cfg       = self.FURNITURE["living_room"]
+        movables  = cfg.get("movables", [])
+        n         = min(n, len(movables))
+        chosen    = self.rng.sample(movables, n)
+        margin    = 0.5
+        max_tries = 20
+
+        def spot_is_free(x, z, r):
+            for ent in self.entities:
+                ex, _, ez = ent.pos
+                if (x - ex)**2 + (z - ez)**2 < (r + ent.radius)**2:
+                    return False
+            return True
+
+        for mesh_name in chosen:
+            # prepare the entity
+            ent    = MeshEnt(
+                mesh_name=mesh_name,
+                height=self.SCALE_FACTORS.get(mesh_name, 1.0),
+                static=False
+            )
+            radius = ent.radius
+
+            # pick a random room by (name, object)
+            room_name, room = self.rng.choice(list(rooms.items()))
+
+            # precompute bounds with margin
+            x_min = room.min_x + margin
+            x_max = room.max_x - margin
+            z_min = room.min_z + margin
+            z_max = room.max_z - margin
+
+            # try to find a free spot
+            for _ in range(max_tries):
+                x = self.rng.uniform(x_min, x_max)
+                z = self.rng.uniform(z_min, z_max)
+                if not spot_is_free(x, z, radius):
+                    continue
+                dir_movable = self.rng.uniform(0, 2 * math.pi)
+                self.place_entity(
+                    ent,
+                    room=room,
+                    pos=(x, 0.0, z),
+                    dir=dir_movable
+                )
+                break
+            else:
+                # if we exhaust our tries, skip with a clear warning
+                print(f"Warning: could not place '{mesh_name}' in any free spot of room '{room_name}'")
+
+
 
 
 
@@ -868,6 +928,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         self._furnish_kitchen(rooms, attach_walls)
         self._furnish_bathroom(rooms, attach_walls)
         self._furnish_bedroom(rooms, attach_walls)
+        self._place_random_movables(rooms, n=2)
 
 
         return rooms, room_positions

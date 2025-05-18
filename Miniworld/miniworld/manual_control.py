@@ -7,10 +7,10 @@ from gymnasium.envs.registration import register
 import numpy as np
 import random
 register(
-    id="JEPAWorld-v2",
+    id="JEPAWorld-v0",
     entry_point="miniworld.envs.jepaworld:JEPAWorld",
     max_episode_steps=500,
-    kwargs={"seed":random.randint(0, 2**31 - 1)},   # any default kwargs your ctor needs
+    kwargs={"seed":6},   # any default kwargs your ctor needs;  random.randint(0, 2**31 - 1)
 )
 
 class ManualControl:
