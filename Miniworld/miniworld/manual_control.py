@@ -4,12 +4,13 @@ import pyglet
 from pyglet.window import key
 from imageio import imwrite
 from gymnasium.envs.registration import register
-
+import numpy as np
+import random
 register(
     id="JEPAWorld-v2",
-    entry_point="miniworld.envs.jepa_world_v2:JEPAWorld",
+    entry_point="miniworld.envs.jepaworld:JEPAWorld",
     max_episode_steps=500,
-    kwargs={"seed": 6},   # any default kwargs your ctor needs
+    kwargs={"seed":random.randint(0, 2**31 - 1)},   # any default kwargs your ctor needs
 )
 
 class ManualControl:
