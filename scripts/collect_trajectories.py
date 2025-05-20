@@ -31,6 +31,7 @@ class CollectTrajectories:
             sample_density=2.0, k_neighbors=10, jitter_ratio=0.0, min_samples=4, min_dist=0.7
         )
         print(self.nodes)
+    
 
         expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission)
         expert_policy.solve_mission()
@@ -98,12 +99,11 @@ class CollectTrajectories:
                     type=e.__class__.__name__,
                     pos=(e.pos[0], e.pos[2]),
                     radius=getattr(e, "radius", 0.0),
-                    node_name=f"{e.__class__.__name__}_{i}",
+                    node_name=f"{e.name}_{i}",
                     yaw=yaw,
                     size=(width, depth),
                 )
             )
-
         return GraphData(rooms, agent, obstacles)
     
     def build_prm_graph(

@@ -133,6 +133,7 @@ class MeshEnt(Entity):
         super().__init__()
 
         self.static = static
+        self.name = mesh_name
 
         # Load the mesh
         self.mesh = ObjMesh.get(mesh_name)
@@ -458,7 +459,7 @@ class Agent(Entity):
 
         # Distance between the camera and the floor
         self.cam_height = 1.5
-
+        self.name = "agent"
         # Camera up/down angles in degrees
         # Positive angles tilt the camera upwards
         self.cam_pitch = 0
