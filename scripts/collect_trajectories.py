@@ -29,11 +29,17 @@ class CollectTrajectories:
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
             sample_density=2.0, k_neighbors=10, jitter_ratio=0.0, min_samples=4, min_dist=0.7
         )
-        self.mission = [("go_to","duckie")]
-        print(self.nodes)
-    
+        agent_node = next(
+         (n for n in self.nodes if n.startswith("agent")),
+            None
+            )
+        if agent_node is None:
+            raise RuntimeError("No Agent node found in self.nodes")
+        self.agent = agent_node
+        self.mission = self._select_random_movable()
+        print("Mission:", self.mission)
 
-        expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission)
+        expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
         expert_policy.solve_mission()
   
         plot_prm_graph(
@@ -45,7 +51,27 @@ class CollectTrajectories:
             smoothed_curve= expert_policy.smoothed_waypoints
         )
 
-    # Functions 
+    # Functions
+
+    def _select_random_movable(self) -> List[Tuple[str, str]]:
+        """Select a mission to go to a random movable object."""
+        movables = [
+            "duckie",
+            "chips",
+            "handy",
+            "keys",
+            "dish",
+            "towl",
+        ]
+
+        candidates = [
+            node for node in self.nodes if any(node.startswith(m) for m in movables)
+        ]
+        if not candidates:
+            raise ValueError("No movable objects found in nodes")
+
+        target = random.choice(candidates)
+        return [("go_to", target)] 
 
     def get_graph_data(self) -> GraphData:
         """

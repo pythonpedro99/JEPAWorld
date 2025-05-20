@@ -41,6 +41,7 @@ class ExpertPolicy:
         nodes_positions,
         obstacles,
         mission: list[str],
+        agent_name
     ):
         # Basics
         self.env = env
@@ -52,6 +53,7 @@ class ExpertPolicy:
         self.obs = []
         self.actions = []
         self.path = []
+        self.agent_name = agent_name
 
         # Debugging
         self.waypoints = []
@@ -102,7 +104,7 @@ class ExpertPolicy:
     def go_to(self, goal: str) -> None:
 
         # 2) Plan path (no smoothing)
-        path = find_path(self.graph, self.nodes, "Agent_6", goal)
+        path = find_path(self.graph, self.nodes, self.agent_name, goal)
         self.path += path
         waypoints = [self.node_positions[node] for node in path]
         self.waypoints += waypoints
