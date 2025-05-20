@@ -1,12 +1,13 @@
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon as MplPolygon, Circle
+from matplotlib.patches import Polygon as MplPolygon
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 from typing import Union, Sequence
 from PIL import Image
 import numpy as np
 import networkx as nx
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, box
+from shapely import affinity
 from pathlib import Path
 from typing import Union, Tuple
 from datetime import datetime
@@ -48,17 +49,30 @@ def plot_prm_graph(
             closed=True, facecolor="lightgray", edgecolor="black", alpha=0.5
         ))
 
-    # Reconstruct obstacle buffers
-    obstacle_buffers = [
-        Point(*obs.pos).buffer(obs.radius)
-        for obs in data.obstacles
-    ]
+    # Reconstruct obstacle buffers as rectangles
+    obstacle_buffers = []
+    for obs in data.obstacles:
+        w, d = obs.size
+        w = max(w, 0.5)
+        d = max(d, 0.5)
+        rect = box(-w / 2, -d / 2, w / 2, d / 2)
+        rect = affinity.rotate(rect, obs.yaw, use_radians=True)
+        rect = affinity.translate(rect, obs.pos[0], obs.pos[1])
+        obstacle_buffers.append(rect)
+
     for buf in obstacle_buffers:
         if buf.is_empty:
             continue
-        cx, cz = buf.centroid.xy
-        r = buf.exterior.distance(buf.centroid)
-        ax.add_patch(Circle((cx[0], cz[0]), r, facecolor="red", alpha=0.3))
+        x, z = buf.exterior.xy
+        ax.add_patch(
+            MplPolygon(
+                list(zip(x, z)),
+                closed=True,
+                facecolor="red",
+                edgecolor="red",
+                alpha=0.3,
+            )
+        )
 
     # Draw PRM edges
     for u, v in G.edges():
