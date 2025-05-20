@@ -119,14 +119,25 @@ class CollectTrajectories:
         """
         graph = nx.Graph()
         room_polygons = {r.id: Polygon(r.vertices) for r in self.graph_data.rooms}
+
+        agent_radius = 0.2
         obstacle_buffers = {}
         for obs in self.graph_data.obstacles:
             w, d = obs.size
             w = max(w, 0.5)
             d = max(d, 0.5)
-            rect = box(-w / 2, -d / 2, w / 2, d / 2)
+            rect = box(
+                -w / 2 - agent_radius,
+                -d / 2 - agent_radius,
+                w / 2 + agent_radius,
+                d / 2 + agent_radius,
+            )
             rect = affinity.rotate(rect, obs.yaw, use_radians=True)
-            rect = affinity.translate(rect, obs.pos[0], obs.pos[1])
+            rect = affinity.translate(
+                rect,
+                obs.pos[0] + agent_radius,
+                obs.pos[1] + agent_radius,
+            )
             obstacle_buffers[obs.node_name] = rect
         node_positions: Dict[str, Tuple[float, float]] = {}
 
