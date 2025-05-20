@@ -51,6 +51,8 @@ class Obstacle:
     pos: Tuple[float, float]
     radius: float
     node_name: str
+    yaw: float
+    size: Tuple[float, float]
 
 
 @dataclass

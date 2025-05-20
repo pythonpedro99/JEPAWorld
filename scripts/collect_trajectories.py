@@ -5,7 +5,8 @@ import gymnasium as gym
 import miniworld.envs
 import networkx as nx
 import numpy as np
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, Point, Polygon, box
+from shapely import affinity
 from scripts.helpers import plot_prm_graph
 from policies.expert import ExpertPolicy
 from policies.helpers import GraphData,Agent, Obstacle, Room, Portal
@@ -79,15 +80,28 @@ class CollectTrajectories:
             radius=agent_obj.radius,
         )
 
-        obstacles = [
-            Obstacle(
-                type=e.__class__.__name__,
-                pos=(e.pos[0], e.pos[2]),
-                radius=getattr(e, "radius", 0.0),
-                node_name=f"{e.__class__.__name__}_{i}",
+        obstacles = []
+        for i, e in enumerate(unwrapped.entities):
+            yaw = getattr(e, "dir", 0.0)
+            if hasattr(e, "size"):
+                sx, _, sz = e.size
+                width, depth = sx, sz
+            elif hasattr(e, "mesh") and hasattr(e.mesh, "min_coords"):
+                width = (e.mesh.max_coords[0] - e.mesh.min_coords[0]) * e.scale
+                depth = (e.mesh.max_coords[2] - e.mesh.min_coords[2]) * e.scale
+            else:
+                width = depth = getattr(e, "radius", 0.0) * 2
+
+            obstacles.append(
+                Obstacle(
+                    type=e.__class__.__name__,
+                    pos=(e.pos[0], e.pos[2]),
+                    radius=getattr(e, "radius", 0.0),
+                    node_name=f"{e.__class__.__name__}_{i}",
+                    yaw=yaw,
+                    size=(width, depth),
+                )
             )
-            for i, e in enumerate(unwrapped.entities)
-        ]
 
         return GraphData(rooms, agent, obstacles)
     
@@ -105,12 +119,15 @@ class CollectTrajectories:
         """
         graph = nx.Graph()
         room_polygons = {r.id: Polygon(r.vertices) for r in self.graph_data.rooms}
-        obstacle_buffers = {
-        obs.node_name: Point(*obs.pos).buffer(
-                max(obs.radius*2, 0.5)
-                   )
-                for obs in self.graph_data.obstacles
-       }
+        obstacle_buffers = {}
+        for obs in self.graph_data.obstacles:
+            w, d = obs.size
+            w = max(w, 0.5)
+            d = max(d, 0.5)
+            rect = box(-w / 2, -d / 2, w / 2, d / 2)
+            rect = affinity.rotate(rect, obs.yaw, use_radians=True)
+            rect = affinity.translate(rect, obs.pos[0], obs.pos[1])
+            obstacle_buffers[obs.node_name] = rect
         node_positions: Dict[str, Tuple[float, float]] = {}
 
         # Portale und Agent/Obstacles wie bisher
