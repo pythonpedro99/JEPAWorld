@@ -72,6 +72,16 @@ class ExpertPolicy:
         self.waypoint_tolerance = 0.2  # tolerance for reaching waypoints
         self.lookahead_distance = 0.5  # distance to look ahead for the next waypoint
 
+    def _save_episode(self) -> None:
+        """Persist collected observations and actions."""
+        if not self.obs:
+            return
+        save_data_batch(
+            self.obs,
+            self.actions,
+            "/Users/julianquast/Documents/Bachelor Thesis/Datasets",
+        )
+
     def solve_mission(self) -> None:
         """
         Execute self.mission, which should be a list of (action, target) tuples.
@@ -93,11 +103,7 @@ class ExpertPolicy:
                 raise ValueError(f"[solve_mission] unknown action '{action}'")
 
         # finally, dump the collected observations & actions
-        save_data_batch(
-            self.obs,
-            self.actions,
-            "/Users/julianquast/Documents/Bachelor Thesis/Datasets"
-        )
+        self._save_episode()
     
    
 
@@ -159,6 +165,7 @@ class ExpertPolicy:
                     self.actions.append(cmd)
                     if term or trunc:
                         print("[DEBUG] Episode timeout.")
+                        self._save_episode()
                         return
                     continue  # re-read pose & re-evaluate
 
@@ -168,6 +175,7 @@ class ExpertPolicy:
                 self.actions.append(cmd)
                 if term or trunc:
                     print("[DEBUG] Episode timeout.")
+                    self._save_episode()
                     return
                 # loop back to re-fetch pose
 
@@ -187,6 +195,7 @@ class ExpertPolicy:
         self.actions.append(4)
         if term or trunc:
             print("[DEBUG] Episode timeout.")
+            self._save_episode()
         return
 
     def drop(self):
@@ -198,6 +207,7 @@ class ExpertPolicy:
         self.actions.append(5)
         if term or trunc:
             print("[DEBUG] Episode timeout.")
+            self._save_episode()
         return
 
     def toogle(self):
@@ -209,6 +219,7 @@ class ExpertPolicy:
         self.actions.append(6)
         if term or trunc:
             print("[DEBUG] Episode timeout.")
+            self._save_episode()
         return
 
     def check_surroundings(self):
