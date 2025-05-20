@@ -298,7 +298,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         w, d = self._random_dim(self.ROOM_SIZE_RANGES[room_name])
         lx0, lx1 = base_room.min_x, base_room.max_x
         lz0, lz1 = base_room.min_z, base_room.max_z
-        p_hw = 0.5  # portal half-width
+        p_hw = 0.75  # portal half-width
 
         if wall_idx == 0:  # east
             hx = lx1 + 0.3

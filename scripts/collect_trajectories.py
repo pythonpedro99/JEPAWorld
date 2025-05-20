@@ -15,7 +15,7 @@ register(
     id="JEPAWorld-v0",
     entry_point="miniworld.envs.jepaworld:JEPAWorld",
     max_episode_steps=500,
-    kwargs={"seed":6},   # any default kwargs your ctor needs;  random.randint(0, 2**31 - 1)
+    kwargs={"seed":random.randint(0, 2**31 - 1)},   # any default kwargs your ctor needs;  random.randint(0, 2**31 - 1)
 )
 
 class CollectTrajectories:
@@ -27,7 +27,7 @@ class CollectTrajectories:
         self.env.reset()
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=1.0, k_neighbors=4, jitter_ratio=0.0, min_samples=1, min_dist=0.3
+            sample_density=1.7, k_neighbors=4, jitter_ratio=0.4, min_samples=0, min_dist=0.5
         )
         agent_node = next(
          (n for n in self.nodes if n.startswith("agent")),
@@ -39,16 +39,16 @@ class CollectTrajectories:
         self.mission = self._select_random_movable()
         print("Mission:", self.mission)
 
-        #expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
-        #expert_policy.solve_mission()
+        expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
+        expert_policy.solve_mission()
   
         plot_prm_graph(
             self.graph_data,
             self.graph,
             self.node_positions,
             self.nodes,
-            #highlight_path= expert_policy.path,
-            #smoothed_curve= expert_policy.smoothed_waypoints
+            highlight_path= expert_policy.path,
+            smoothed_curve= expert_policy.smoothed_waypoints
         )
 
     # Functions
@@ -133,22 +133,24 @@ class CollectTrajectories:
         return GraphData(rooms, agent, obstacles)
     
     def build_prm_graph(
-    self,
-    sample_density: float = 0.05,
-    k_neighbors: int = 15,
-    jitter_ratio: float = 0.3,
-    min_samples: int = 5,
-    min_dist: float = 0.2,          # <— neuer Parameter: Mindestabstand zu Wänden/Polygonrand
-) -> Tuple[nx.Graph, Dict[str, Tuple[float, float]], List[str]]:
+        self,
+        sample_density: float = 0.05,
+        k_neighbors: int = 15,
+        jitter_ratio: float = 0.3,
+        min_samples: int = 5,
+        min_dist: float = 0.2,
+    ) -> Tuple[nx.Graph, Dict[str, Tuple[float, float]], List[str]]:
         """
         Constructs a probabilistic roadmap graph from environment data,
         ensuring that all samples lie at least `min_dist` away from room boundaries.
         """
         graph = nx.Graph()
+        # Precompute room polygons
         room_polygons = {r.id: Polygon(r.vertices) for r in self.graph_data.rooms}
 
-        agent_radius = 0.3
-        obstacle_buffers = {}
+        # Build obstacle buffers (inflated by agent radius)
+        agent_radius = 0.4
+        obstacle_buffers: Dict[str, Polygon] = {}
         for obs in self.graph_data.obstacles:
             w, d = obs.size
             w = max(w, 0.5)
@@ -166,22 +168,50 @@ class CollectTrajectories:
                 obs.pos[1] + agent_radius,
             )
             obstacle_buffers[obs.node_name] = rect
+
+        # Node position map
         node_positions: Dict[str, Tuple[float, float]] = {}
-        # now add agent & obstacles without touching portals
+
+        portal_offset = 0.3
+        portal_nodes: Dict[Tuple[float, float], str] = {}
+        portal_idx = 0
+        for room in self.graph_data.rooms:
+            poly = room_polygons[room.id]
+            for p in room.portals:
+                mid_pt = (float(p.midpoint[0]), float(p.midpoint[1]))
+                key = (round(mid_pt[0], 3), round(mid_pt[1], 3))
+                if key not in portal_nodes:
+                    # compute perpendicular to portal edge
+                    start = np.array(p.start)
+                    end = np.array(p.end)
+                    dir_vec = end - start
+                    norm = np.linalg.norm(dir_vec)
+                    unit = dir_vec / norm if norm > 0 else np.array([1.0, 0.0])
+                    perp = np.array([-unit[1], unit[0]])
+
+                    # offset candidates
+                    cand1 = np.array(mid_pt) + perp * portal_offset
+                    cand2 = np.array(mid_pt) - perp * portal_offset
+                    # choose the point inside the room polygon
+                    pos = cand1 if poly.contains(Point(*cand1)) else cand2
+
+                    name = f"_portal_{portal_idx}"
+                    portal_nodes[key] = name
+                    node_positions[name] = (float(pos[0]), float(pos[1]))
+                    portal_idx += 1
+
+        # 2) Add agent and obstacle nodes
         node_positions["agent"] = tuple(self.graph_data.agent.pos)
         for obs in self.graph_data.obstacles:
             node_positions[obs.node_name] = tuple(obs.pos)
 
-        # ——— Hier beginnt das Sampling, angepasst um den Shrink ———
+        # 3) Sample interior points in each room, shrunk by min_dist
         for room in self.graph_data.rooms:
             poly = room_polygons[room.id]
-            # 1) Schrumpfe das Polygon um min_dist
             inner_poly = poly.buffer(-min_dist)
             if inner_poly.is_empty:
-                # Fallback: wenn zu stark geschrumpft, nutze das Original
                 inner_poly = poly
 
-            # 2) Wie viele Samples?
             n_samples = max(min_samples, int(poly.area * sample_density))
             grid = max(1, int(np.sqrt(n_samples)))
             minx, miny, maxx, maxy = inner_poly.bounds
@@ -198,17 +228,15 @@ class CollectTrajectories:
                     y = cy + (random.random() - 0.5) * dy * jitter_ratio
                     pt = Point(x, y)
 
-                    # 3) Prüfe gegen das geschrumpfte Polygon
                     if not inner_poly.covers(pt):
                         continue
-                    # 4) Prüfe gegen Hindernisse wie bisher
                     if any(buf.contains(pt) for buf in obstacle_buffers.values()):
                         continue
 
                     node_positions[f"r{room.id}_s{count}"] = (x, y)
                     count += 1
-        # ——— Sampling Ende ———
 
+        # 4) Helper to find which room a point lies in
         def room_of(point: Tuple[float, float]) -> Optional[int]:
             for rid, poly in room_polygons.items():
                 if poly.covers(Point(point)):
@@ -217,7 +245,7 @@ class CollectTrajectories:
 
         agent_room = room_of(self.graph_data.agent.pos)
 
-        # Kanten verbinden wie bisher
+        # 5) Connect k-nearest neighbors within each room
         for rid, poly in room_polygons.items():
             nodes_in_room = [
                 name
@@ -231,8 +259,6 @@ class CollectTrajectories:
                 for m in nodes_in_room:
                     if m == n:
                         continue
-                    if n.startswith(f"r{rid}_p") and m.startswith(f"r{rid}_p"):
-                        continue
                     pos_m = np.array(node_positions[m])
                     dist_sq = float(np.sum((pos_n - pos_m) ** 2))
                     dists.append((m, dist_sq))
@@ -242,17 +268,50 @@ class CollectTrajectories:
                     if not poly.covers(seg):
                         continue
                     if any(
-                        name not in {n, m} and buf.intersects(seg)
-                        for name, buf in obstacle_buffers.items()
+                        other_name not in {n, m} and buf.intersects(seg)
+                        for other_name, buf in obstacle_buffers.items()
                     ):
                         continue
                     graph.add_edge(n, m, weight=seg.length)
+        # 7) Additionally connect portal nodes sharing the same X or Y coordinate
+        portal_list = [n for n in node_positions if n.startswith("_portal_")]
+        # group by rounded X
+        x_groups: Dict[float, List[str]] = {}
+        for n in portal_list:
+            x = round(node_positions[n][0], 3)
+            x_groups.setdefault(x, []).append(n)
+        for group in x_groups.values():
+            if len(group) > 1:
+                for i in range(len(group)):
+                    for j in range(i+1, len(group)):
+                        n1, n2 = group[i], group[j]
+                        p1 = np.array(node_positions[n1])
+                        p2 = np.array(node_positions[n2])
+                        dist = float(np.linalg.norm(p1 - p2))
+                        graph.add_edge(n1, n2, weight=dist)
+        # group by rounded Y
+        y_groups: Dict[float, List[str]] = {}
+        for n in portal_list:
+            y = round(node_positions[n][1], 3)
+            y_groups.setdefault(y, []).append(n)
+        for group in y_groups.values():
+            if len(group) > 1:
+                for i in range(len(group)):
+                    for j in range(i+1, len(group)):
+                        n1, n2 = group[i], group[j]
+                        p1 = np.array(node_positions[n1])
+                        p2 = np.array(node_positions[n2])
+                        dist = float(np.linalg.norm(p1 - p2))
+                        graph.add_edge(n1, n2, weight=dist)
+        
 
+        # 6) Return graph, all node positions, and obstacle names
         return (
             graph,
             node_positions,
             [obs.node_name for obs in self.graph_data.obstacles],
         )
+
 
 
 

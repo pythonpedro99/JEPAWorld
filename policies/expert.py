@@ -138,6 +138,7 @@ class ExpertPolicy:
 
             # Track consecutive no-move attempts
             no_move_count = 0
+            self.scan_room(sweep_steps=3)
 
             while True:
                 # 5) Read current pose
@@ -191,7 +192,7 @@ class ExpertPolicy:
                 if (new_x, new_y) == (old_x, old_y):
                     no_move_count += 1
                     print(f"[DEBUG] No movement detected (count={no_move_count}).")
-                    if no_move_count >= 3:
+                    if no_move_count >= 5:
                         print("[DEBUG] Stuck: aborting go_to.")
                         return
                 else:
@@ -199,6 +200,50 @@ class ExpertPolicy:
                 # loop back to re-fetch pose
 
         print("reached goal")
+
+    def scan_room(self, sweep_steps: int = 5) -> None:
+        """
+        Perform a left-right-left rotation to survey the room interior.
+        sweep_steps: number of turn-in-place actions per half-sweep
+        """
+        import numpy as np
+
+        def yaw_deg():
+            return (np.degrees(self.env.unwrapped.agent.dir) + 360) % 360
+
+        print("[DEBUG] Starting room scan: current yaw=%.1f°" % yaw_deg())
+
+        # 1) Sweep left from center
+        for i in range(sweep_steps):
+            obs, _, term, trunc, _ = self.env.step(0)  # cmd=0: turn left
+            self.obs.append(obs)
+            self.actions.append(0)
+            print(f"[SCAN] Left step {i+1}/{sweep_steps}, yaw={yaw_deg():.1f}°")
+            if term or trunc:
+                print("[DEBUG] Episode terminated during scan.")
+                return
+
+        # 2) Sweep right through center to rightmost
+        for i in range(2 * sweep_steps):
+            obs, _, term, trunc, _ = self.env.step(1)  # cmd=1: turn right
+            self.obs.append(obs)
+            self.actions.append(1)
+            print(f"[SCAN] Right step {i+1}/{2*sweep_steps}, yaw={yaw_deg():.1f}°")
+            if term or trunc:
+                print("[DEBUG] Episode terminated during scan.")
+                return
+
+        # 3) Return to center
+        for i in range(sweep_steps):
+            obs, _, term, trunc, _ = self.env.step(0)  # cmd=0: turn left
+            self.obs.append(obs)
+            self.actions.append(0)
+            print(f"[SCAN] Return left step {i+1}/{sweep_steps}, yaw={yaw_deg():.1f}°")
+            if term or trunc:
+                print("[DEBUG] Episode terminated during scan.")
+                return
+
+        print("[DEBUG] Room scan complete: final yaw=%.1f°" % yaw_deg())
 
 
 
