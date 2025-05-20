@@ -72,12 +72,12 @@ class ExpertPolicy:
         self.waypoint_tolerance = 0.2  # tolerance for reaching waypoints
         self.lookahead_distance = 0.5  # distance to look ahead for the next waypoint
 
-    def _obstacle_polygon(self, obs) -> Polygon:
-        """Return shapely polygon of the obstacle."""
-        w, d = obs.size
-        poly = box(-w / 2, -d / 2, w / 2, d / 2)
-        poly = affinity.rotate(poly, obs.yaw, use_radians=True)
-        return affinity.translate(poly, obs.pos[0], obs.pos[1])
+    # def _obstacle_polygon(self, obs) -> Polygon:
+    #     """Return shapely polygon of the obstacle."""
+    #     w, d = obs.size
+    #     poly = box(-w / 2, -d / 2, w / 2, d / 2)
+    #     poly = affinity.rotate(poly, obs.yaw, use_radians=True)
+    #     return affinity.translate(poly, obs.pos[0], obs.pos[1])
 
     def _save_episode(self) -> None:
         """Persist collected observations and actions."""
@@ -121,6 +121,7 @@ class ExpertPolicy:
         self.path += path
         waypoints = [self.node_positions[node] for node in path]
         self.waypoints += waypoints
+        print(len(waypoints))
 
         if not waypoints:
             print(f"[DEBUG] No waypoints for goal '{goal}'.")
@@ -128,17 +129,18 @@ class ExpertPolicy:
 
         target_obs = next((o for o in self.obstacles if o.node_name == goal), None)
         agent_radius = getattr(self.env.unwrapped.agent, "radius", 0.2)
-        target_poly = self._obstacle_polygon(target_obs) if target_obs else None
         target_buffer = agent_radius + 0.5
-        if target_obs:
-            print(
-                f"[DEBUG] Target polygon size=({target_obs.size[0]:.2f},{target_obs.size[1]:.2f})"
-            )
+        # if target_obs:
+        #     print(
+        #         f"[DEBUG] Target polygon size=({target_obs.size[0]:.2f},{target_obs.size[1]:.2f})"
+        #     )
 
         for idx, (wx, wy) in enumerate(waypoints, start=1):
             print(f"\n=== New goal: ({wx:.2f}, {wy:.2f}) ===")
             is_last = idx == len(waypoints)
+            print(idx)
             buf = target_buffer if is_last else self.waypoint_tolerance
+            print(buf)
             while True:
                 # current pose
                 x, y    = self.env.unwrapped.agent.pos[0], self.env.unwrapped.agent.pos[2]
@@ -151,8 +153,11 @@ class ExpertPolicy:
                 dist = np.hypot(dx, dy)
 
                 reached = False
-                if is_last and target_poly is not None:
-                    reached = target_poly.distance(Point(x, y)) <= target_buffer
+                if is_last and target_obs is not None:
+                    # check distance from agent to the center of the object
+                    cx, cy = target_obs.pos
+                    center_dist = np.hypot(cx - x, cy - y)
+                    reached = center_dist <= target_buffer
                 else:
                     reached = dist < buf
 
@@ -174,6 +179,7 @@ class ExpertPolicy:
                 print(f"[DEBUG] pos=({x:.2f},{y:.2f})  yaw={yaw_deg:.1f}°  "
                     f"target=({wx:.2f},{wy:.2f})  "
                     f"dist={dist:.3f}m\n"
+                    f"buf={buf:.2f}m"
                     f"        desired={desired_deg:.1f}°  err={err_deg:.1f}°  "
                     f"(tol={np.degrees(self.turn_tol):.1f}°)")
 
