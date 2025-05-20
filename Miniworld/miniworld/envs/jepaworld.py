@@ -715,7 +715,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         cfg       = self.FURNITURE["living_room"]
         movables  = cfg.get("movables", [])
         n         = min(n, len(movables))
-        chosen    = ['dish_01/dish_01', 'duckie'] #self.rng.sample(movables, n)
+        chosen    = self.rng.sample(movables, n)
         print(chosen)
         margin    = 0.5
         max_tries = 20
