@@ -119,10 +119,8 @@ class ExpertPolicy:
             print(f"[DEBUG] No waypoints for goal '{goal}'.")
             return
 
-        n_wp = len(waypoints)
-        #print(f"[DEBUG] Moving to goal '{goal}' via {n_wp} waypoints (final buffer={target_buffer}).")
         target_obs = next((o for o in self.obstacles if o.node_name == goal), None)
-        target_buffer = target_obs.radius +0.6
+        target_buffer = target_obs.radius + 1.0
         print(f"[DEBUG] Target buffer: {target_buffer:.2f}m")
 
         for idx, (wx,wy)  in enumerate(waypoints, start=1):
