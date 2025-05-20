@@ -122,7 +122,7 @@ DEFAULT_PARAMS.set(
 DEFAULT_PARAMS.set("obj_color_bias", [0, 0, 0], [-0.2, -0.2, -0.2], [0.2, 0.2, 0.2])
 DEFAULT_PARAMS.set("forward_step", 0.3, 0.15, 0.6)
 DEFAULT_PARAMS.set("forward_drift", 0, -0.05, 0.05)
-DEFAULT_PARAMS.set("turn_step", 30, 15, 45)
+DEFAULT_PARAMS.set("turn_step", 20, 15, 45)
 DEFAULT_PARAMS.set("bot_radius", 0.4, 0.38, 0.42)
 DEFAULT_PARAMS.set("cam_pitch", 0, -5, 5)
 DEFAULT_PARAMS.set("cam_fov_y", 60, 55, 65)

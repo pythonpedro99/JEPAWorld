@@ -799,7 +799,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         self._furnish_kitchen(rooms, attach_walls)
         self._furnish_bathroom(rooms, attach_walls)
         self._furnish_bedroom(rooms, attach_walls)
-        self._place_random_movables(rooms, n=2)
+        self._place_random_movables(rooms, n=1)
 
 
         return rooms, room_positions

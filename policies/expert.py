@@ -14,9 +14,9 @@ import miniworld.envs
 import networkx as nx
 import numpy as np
 from scipy.interpolate import splprep, splev
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, Point, Polygon, box
+from shapely import affinity
 from policies.helpers import find_path, smooth_path, get_lookahead_point
-from shapely.geometry import Point
 import numpy as np
 import random
 import time
@@ -59,9 +59,9 @@ class ExpertPolicy:
         self.waypoints = []
         self.smoothed_waypoints = []
         # Default values
-        self.forward_step = 0.15
-        self.turn_step = np.deg2rad(5)
-        self.turn_tol = self.turn_step 
+        self.forward_step = 0.3
+        self.turn_step = np.deg2rad(20)
+        self.turn_tol = self.turn_step *0.75
         self.chaikins_iterations = 3
         self.min_forward_prob = 0.1  # minimum forward-if-misaligned probability
         self.max_forward_prob = 0.5  # maximum forward-if-misaligned probability
@@ -71,6 +71,13 @@ class ExpertPolicy:
         self.pause_prob = 0.1  # probability of pausing at each step
         self.waypoint_tolerance = 0.2  # tolerance for reaching waypoints
         self.lookahead_distance = 0.5  # distance to look ahead for the next waypoint
+
+    def _obstacle_polygon(self, obs) -> Polygon:
+        """Return shapely polygon of the obstacle."""
+        w, d = obs.size
+        poly = box(-w / 2, -d / 2, w / 2, d / 2)
+        poly = affinity.rotate(poly, obs.yaw, use_radians=True)
+        return affinity.translate(poly, obs.pos[0], obs.pos[1])
 
     def _save_episode(self) -> None:
         """Persist collected observations and actions."""
@@ -120,12 +127,18 @@ class ExpertPolicy:
             return
 
         target_obs = next((o for o in self.obstacles if o.node_name == goal), None)
-        target_buffer = target_obs.radius + 1.0
-        print(f"[DEBUG] Target buffer: {target_buffer:.2f}m")
+        agent_radius = getattr(self.env.unwrapped.agent, "radius", 0.2)
+        target_poly = self._obstacle_polygon(target_obs) if target_obs else None
+        target_buffer = agent_radius + 0.05
+        if target_obs:
+            print(
+                f"[DEBUG] Target polygon size=({target_obs.size[0]:.2f},{target_obs.size[1]:.2f})"
+            )
 
-        for idx, (wx,wy)  in enumerate(waypoints, start=1):
+        for idx, (wx, wy) in enumerate(waypoints, start=1):
             print(f"\n=== New goal: ({wx:.2f}, {wy:.2f}) ===")
-            buf = target_buffer if idx == len(waypoints) else self.waypoint_tolerance 
+            is_last = idx == len(waypoints)
+            buf = target_buffer if is_last else self.waypoint_tolerance
             while True:
                 # current pose
                 x, y    = self.env.unwrapped.agent.pos[0], self.env.unwrapped.agent.pos[2]
@@ -135,9 +148,18 @@ class ExpertPolicy:
 
                 # vector to goal
                 dx, dy = wx - x, wy - y
-                dist   = np.hypot(dx, dy)
-                if dist < buf:
-                    print(f"[DEBUG] Reached goal: pos=({x:.2f},{y:.2f}) dist={dist:.3f}m\n")
+                dist = np.hypot(dx, dy)
+
+                reached = False
+                if is_last and target_poly is not None:
+                    reached = target_poly.distance(Point(x, y)) <= target_buffer
+                else:
+                    reached = dist < buf
+
+                if reached:
+                    print(
+                        f"[DEBUG] Reached goal: pos=({x:.2f},{y:.2f}) dist={dist:.3f}m\n"
+                    )
                     break
 
                 # compute desired heading & error
@@ -170,7 +192,7 @@ class ExpertPolicy:
                 # move forward
                 obs, _, term, trunc, _ = self.env.step(2)
                 self.obs.append(obs)
-                self.actions.append(cmd)
+                self.actions.append(2)
                 if term or trunc:
                     print("[DEBUG] Episode timeout.")
                     self._save_episode()
