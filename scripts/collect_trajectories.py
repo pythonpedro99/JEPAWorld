@@ -25,22 +25,23 @@ class CollectTrajectories:
         # Basics 
         self.env = gym.make("JEPAWorld-v0", seed=6)
         self.env.reset()
-        #self.mission = [("got_to","")]
+        self.mission = [("go_to","duckie")]
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
             sample_density=2.0, k_neighbors=10, jitter_ratio=0.0, min_samples=4, min_dist=0.7
         )
+        print(self.nodes)
 
-        #expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission)
-        #expert_policy.solve_mission()
+        expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission)
+        expert_policy.solve_mission()
   
         plot_prm_graph(
             self.graph_data,
             self.graph,
             self.node_positions,
             self.nodes,
-            #highlight_path= expert_policy.path,
-            #smoothed_curve= expert_policy.smoothed_waypoints
+            highlight_path= expert_policy.path,
+            smoothed_curve= expert_policy.smoothed_waypoints
         )
 
     # Functions 

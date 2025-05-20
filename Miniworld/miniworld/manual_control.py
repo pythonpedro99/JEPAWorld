@@ -10,7 +10,7 @@ register(
     id="JEPAWorld-v0",
     entry_point="miniworld.envs.jepaworld:JEPAWorld",
     max_episode_steps=500,
-    kwargs={"seed": random.randint(0, 2**31 - 1)},   # any default kwargs your ctor needs;  random.randint(0, 2**31 - 1)
+    kwargs={"seed":6},   # any default kwargs your ctor needs;  random.randint(0, 2**31 - 1)
 )
 
 class ManualControl:
