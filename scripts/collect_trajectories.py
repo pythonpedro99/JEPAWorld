@@ -39,16 +39,16 @@ class CollectTrajectories:
         self.mission = self._select_random_movable()
         print("Mission:", self.mission)
 
-        expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
-        expert_policy.solve_mission()
+        #expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
+        #expert_policy.solve_mission()
   
         plot_prm_graph(
             self.graph_data,
             self.graph,
             self.node_positions,
             self.nodes,
-            highlight_path= expert_policy.path,
-            smoothed_curve= expert_policy.smoothed_waypoints
+            #highlight_path= expert_policy.path,
+            #smoothed_curve= expert_policy.smoothed_waypoints
         )
 
     # Functions
@@ -167,14 +167,48 @@ class CollectTrajectories:
             )
             obstacle_buffers[obs.node_name] = rect
         node_positions: Dict[str, Tuple[float, float]] = {}
+        portal_offset = 0.3
 
-        # Portale und Agent/Obstacles wie bisher
+        # loop only over actual rooms, not portal objects
         for room in self.graph_data.rooms:
+            if isinstance(room, Portal):
+                continue
+
+            poly     = room_polygons[room.id]
+            centroid = np.array(poly.centroid.coords[0])
+
             for idx, p in enumerate(room.portals):
-                node_positions[f"r{room.id}_p{idx}"] = p.midpoint
-        node_positions["agent"] = self.graph_data.agent.pos
+                mid = np.array(p.midpoint)
+                dx, dy = p.end[0] - p.start[0], p.end[1] - p.start[1]
+
+                # pick axis perpendicular to door edge
+                if abs(dx) > abs(dy):
+                    # horizontal door → offset in Y
+                    direction = np.sign(centroid[1] - mid[1])
+                    inside = mid + np.array([0.0, direction * portal_offset])
+                else:
+                    # vertical door → offset in X
+                    direction = np.sign(centroid[0] - mid[0])
+                    inside = mid + np.array([direction * portal_offset, 0.0])
+
+                # ensure the point lies strictly inside the room
+                inner = poly.buffer(-portal_offset * 0.9)
+                if inner.is_empty or not inner.covers(Point(*inside)):
+                    # fallback: snap midpoint onto inner boundary
+                    if not inner.is_empty:
+                        proj = inner.exterior.interpolate(inner.exterior.project(Point(*mid)))
+                        node_pos = np.array(proj.coords[0])
+                    else:
+                        node_pos = mid
+                else:
+                    node_pos = inside
+
+                node_positions[f"r{room.id}_p{idx}"] = tuple(node_pos)
+
+        # now add agent & obstacles without touching portals
+        node_positions["agent"] = tuple(self.graph_data.agent.pos)
         for obs in self.graph_data.obstacles:
-            node_positions[obs.node_name] = obs.pos
+            node_positions[obs.node_name] = tuple(obs.pos)
 
         # ——— Hier beginnt das Sampling, angepasst um den Shrink ———
         for room in self.graph_data.rooms:
