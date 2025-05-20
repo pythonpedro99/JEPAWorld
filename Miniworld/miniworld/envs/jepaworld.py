@@ -1,13 +1,9 @@
 import random
 import math
 from gymnasium import spaces, utils
-from miniworld.entity import Box, MeshEnt
-from miniworld.miniworld import MiniWorldEnv, Texture
-import pprint
-# from OpenGL.GL import glBegin, glEnd, glNormal3f, glTexCoord2f, glVertex3f, glColor3f, glDisable, glEnable, GL_POLYGON, GL_QUADS, GL_TEXTURE_2D
+from miniworld.entity import MeshEnt
+from miniworld.miniworld import MiniWorldEnv
 import numpy as np
-from miniworld.miniworld import Y_VEC, gen_texcs_floor, gen_texcs_wall
-from miniworld.miniworld import Y_VEC, gen_texcs_floor, gen_texcs_wall
 from pyglet.gl import (
     GL_POLYGON,
     GL_QUADS,
@@ -115,8 +111,9 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
             "washer": ["washer_01/washer_01"],    
         },
         "bedroom": {"bed": ["bed_01/bed_01"]},
-        
+
         }
+    WALL_DIRS = (-math.pi/2, 0.0, math.pi/2, math.pi)
     SCALE_FACTORS = {
     # living room
     "sofa_01/sofa_01":            1.5,
@@ -175,6 +172,35 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         d = self.rng.uniform(min_d, max_d)
         return w, d
 
+    def _flatten(self, items):
+        out = []
+        for it in items:
+            if isinstance(it, (list, tuple)):
+                out.extend(self._flatten(it))
+            else:
+                out.append(it)
+        return out
+
+    def _room_center(self, room):
+        return 0.5 * (room.min_x + room.max_x), 0.5 * (room.min_z + room.max_z)
+
+    def _wall_setup(self, room, wall, off_wall=0.0, off_along=0.0, spacing=0.0):
+        x0, x1 = room.min_x, room.max_x
+        z0, z1 = room.min_z, room.max_z
+        if wall == 0:
+            base_px, base_pz = x1 - off_wall, z0 + off_along
+            step = (0.0, 0.0, spacing)
+        elif wall == 2:
+            base_px, base_pz = x0 + off_wall, z0 + off_along
+            step = (0.0, 0.0, spacing)
+        elif wall == 1:
+            base_px, base_pz = x0 + off_along, z0 + off_wall
+            step = (spacing, 0.0, 0.0)
+        else:
+            base_px, base_pz = x0 + off_along, z1 - off_wall
+            step = (spacing, 0.0, 0.0)
+        return base_px, base_pz, self.WALL_DIRS[wall], step
+
     def _add_room(self, name, x, z, w, h, rooms, room_positions):
         # choose solid-color keys
         wall_key  = self.rng.choice(list(self.COLOR_TEXTURES.values()))
@@ -204,11 +230,12 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         _, hd = self._random_dim(self.ROOM_SIZE_RANGES["hallway"])
         lx0, lx1 = living.min_x, living.max_x
         lz0, lz1 = living.min_z, living.max_z
+        cx, cz = self._room_center(living)
         p_hw = 0.5  # portal half‐width
 
         if wall_idx == 0:  # east wall
             # 1) portal center on living’s east wall (z‐axis midpoint)
-            center_z = (lz0 + lz1) / 2
+            center_z = cz
             # 2) hallway spans z from center_z–hw/2 to center_z+hw/2
             hz = center_z - hw / 2
             #    and shoots out in +x for hd meters
@@ -223,7 +250,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
             )
 
         elif wall_idx == 2:  # west wall
-            center_z = (lz0 + lz1) / 2
+            center_z = cz
             hz = center_z - hw / 2
             # shoots out in –x for hd meters
             hx = lx0 - hd - 0.3
@@ -236,7 +263,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
             )
 
         elif wall_idx == 1:  # south wall (already perpendicular)
-            center_x = (lx0 + lx1) / 2
+            center_x = cx
             hx = center_x - hw / 2
             hz = lz0 - hd - 0.3
             hallway = self._add_room("hallway", hx, hz, hw, hd, rooms, room_positions)
@@ -248,7 +275,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
             )
 
         else:  # north wall
-            center_x = (lx0 + lx1) / 2
+            center_x = cx
             hx = center_x - hw / 2
             hz = lz1 + 0.3
             hallway = self._add_room("hallway", hx, hz, hw, hd, rooms, room_positions)
@@ -311,8 +338,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         free_walls = [w for w in range(living.num_walls) if w not in used_walls]
 
         # compute room center
-        cx = 0.5 * (living.min_x + living.max_x)
-        cz = 0.5 * (living.min_z + living.max_z)
+        cx, cz = self._room_center(living)
 
         # 1) Couch
         couch_wall = self.rng.choice(free_walls)
@@ -321,22 +347,11 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         couch_ent  = MeshEnt(mesh_name=couch_mesh, height=1.0)
 
         # compute orientation and center-of-wall position
-        if couch_wall == 0:  # east wall → face west
-            dir_couch = -math.pi/2
-            pos_x     = living.max_x - 0.7
-            pos_z     = cz
-        elif couch_wall == 2:  # west wall → face east
-            dir_couch = math.pi/2
-            pos_x     = living.min_x + 0.7
-            pos_z     = cz
-        elif couch_wall == 1:  # south wall → face north
-            dir_couch = 0.0
-            pos_x     = cx
-            pos_z     = living.min_z + 0.7
-        else:  # north wall → face south
-            dir_couch = math.pi
-            pos_x     = cx
-            pos_z     = living.max_z - 0.7
+        if couch_wall in (0, 2):
+            along = cz - living.min_z
+        else:
+            along = cx - living.min_x
+        pos_x, pos_z, dir_couch, _ = self._wall_setup(living, couch_wall, 0.7, along)
         
         # place couch at computed pos
         self.place_entity(
@@ -473,173 +488,81 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
             pos=(tv_x, 0.0, tv_z),
             dir=tv_dir
         )
-        # # movables ents 
-        # def spot_is_free(x, z, r, entities):
-        #     """
-        #     Return True if no existing entity in `entities`
-        #     overlaps the circle at (x,z) with radius r.
-        #     """
-        #     for ent in entities:
-        #         ex, _, ez = ent.pos
-        #         # sum of radii
-        #         min_dist = r + ent.radius
-        #         # squared distance
-        #         if (x - ex)**2 + (z - ez)**2 < min_dist**2:
-        #             return False
-        #     return True
-
-        # # … inside your room-gen method …
-
-        # movables  = cfg["movables"]
-        # count     = min(1, len(movables))
-        # chosen    = self.rng.sample(movables, count)
-        # margin    = 0.5
-        # max_tries = 20
-
-        # for mesh_name in chosen:
-        #     # create the entity to place
-        #     ent    = MeshEnt(mesh_name=mesh_name, height= self.SCALE_FACTORS[mesh_name], static=False)
-        #     radius = ent.radius  # use its computed bounding radius
-
-        #     for attempt in range(max_tries):
-        #         # sample a random spot
-        #         x = self.rng.uniform(living.min_x + margin, living.max_x - margin)
-        #         z = self.rng.uniform(living.min_z + margin, living.max_z - margin)
-
-        #         # check against every placed entity
-        #         if not spot_is_free(x, z, radius, self.entities):
-        #             continue  # collision, retry
-
-        #         # free spot found → place it
-        #         dir_movable = self.rng.uniform(0, 2 * math.pi)
-        #         self.place_entity(
-        #             ent,
-        #             room=living,
-        #             pos=(x, 0.0, z),
-        #             dir=dir_movable
-        #         )
-        #         break
-        #     else:
-        #         # fallback after too many tries:
-        #         # either skip or place anyway with a warning
-        #         print(f"Warning: no free spot for {mesh_name} skipping")
-        #         # x = max(min(x, living.max_x - margin), living.min_x + margin)
-        #         # z = max(min(z, living.max_z - margin), living.min_z + margin)
-        #         # self.place_entity(
-        #         #     ent,
-        #         #     room=living,
-        #         #     pos=(x, 0.0, z),
-        #         #     dir=self.rng.uniform(0, 2 * math.pi)
-        #         # )
 
     def _furnish_kitchen(self, rooms, attach_walls):
-            """
-            Pick one non–living/non–hallway room, choose a random wall
-            (not the portal wall), and place kitchen parts:
-            fridge, stove, sink along that wall from the lower corner,
-            then on the opposite wall place a trash bin in the lower corner
-            and a cupboard at the midpoint. For parts whose config is a nested list,
-            flatten the lists and choose randomly among all entries (e.g. stove).
-            """
-            cfg = self.FURNITURE["kitchen"]
-            OFF = 0.7       # offset from wall
-            SPACING = 1.5   # spacing between units along wall
-            room = rooms.get("kitchen")
-            if not room:
-                return
-            portal_wall = attach_walls["kitchen"]
+        """
+        Place kitchen units in the kitchen:
+        fridge and stove on one wall, the sink nearby, and trash on the opposite wall.
+        """
+        cfg = self.FURNITURE["kitchen"]
+        OFF = 0.7       # offset from wall
+        SPACING = 1.5   # spacing between units along wall
+        room = rooms.get("kitchen")
+        if not room:
+            return
+        portal_wall = attach_walls["kitchen"]
 
-            # 3) choose a free wall (not the portal back to parent)
-            free_walls = [w for w in range(room.num_walls) if w != portal_wall]
-            wall = self.rng.choice(free_walls)
+        # 3) choose a free wall (not the portal back to parent)
+        free_walls = [w for w in range(room.num_walls) if w != portal_wall]
+        wall = self.rng.choice(free_walls)
 
-            # 4) compute base position, orientation, and step vector
-            x0, x1 = room.min_x, room.max_x
-            z0, z1 = room.min_z, room.max_z
-            cx, cz = 0.5*(x0 + x1), 0.5*(z0 + z1)
+        # 4) compute base position, orientation, and step vector
+        base_px, base_pz, base_pd, step = self._wall_setup(
+            room, wall, OFF, OFF, SPACING
+        )
 
-            if wall == 0:      # east wall → face west, runs alongside +z
-                base_px, base_pz, base_pd = x1 - OFF, z0 + OFF, -math.pi/2
-                step = (0.0, 0.0, SPACING)
-            elif wall == 2:    # west wall → face east, runs alongside +z
-                base_px, base_pz, base_pd = x0 + OFF, z0 + OFF, math.pi/2
-                step = (0.0, 0.0, SPACING)
-            elif wall == 1:    # south wall → face north, runs alongside +x
-                base_px, base_pz, base_pd = x0 + OFF, z0 + OFF, 0.0
-                step = (SPACING, 0.0, 0.0)
-            else:              # north wall → face south, runs alongside +x
-                base_px, base_pz, base_pd = x0 + OFF, z1 - OFF, math.pi
-                step = (SPACING, 0.0, 0.0)
+        # 5) place fridge & stove along the wall, then sink separately
+        sequence = ["fridge", "stove"]
+        for i, key in enumerate(sequence):
+            meshes = self._flatten(cfg.get(key, []))
+            if not meshes:
+                continue
+            mesh = self.rng.choice(meshes)
+            ent  = MeshEnt(mesh_name=mesh,
+                        height=self.SCALE_FACTORS.get(mesh, 1.0),
+                        static=True)
+            # position fridge & stove spaced by `step`
+            px = base_px + step[0] * i
+            pz = base_pz + step[2] * i
+            self.place_entity(
+                ent,
+                room=room,
+                pos=(px, 0.0, pz),
+                dir=base_pd,
+            )
 
-            # helper to flatten nested lists
-            def _flatten(items):
-                flat = []
-                for it in items:
-                    if isinstance(it, (list, tuple)):
-                        flat.extend(it)
-                    else:
-                        flat.append(it)
-                return flat
+        # now place the sink in its own spot
+        sink_meshes = self._flatten(cfg.get("sink", []))
+        if sink_meshes:
+            sink_mesh = self.rng.choice(sink_meshes)
+            sink_ent   = MeshEnt(
+                mesh_name=sink_mesh,
+                height=self.SCALE_FACTORS.get(sink_mesh, 1.0),
+            )
 
-           # 5) place fridge & stove along the wall, then sink separately
-            sequence = ["fridge", "stove"]
-            for i, key in enumerate(sequence):
-                meshes = cfg.get(key, [])
-                meshes = _flatten(meshes)
-                if not meshes:
-                    continue
-                mesh = self.rng.choice(meshes)
-                ent  = MeshEnt(mesh_name=mesh,
-                            height=self.SCALE_FACTORS.get(mesh, 1.0),
-                            static=True)
-                # position fridge & stove spaced by `step`
-                px = base_px + step[0] * i
-                pz = base_pz + step[2] * i
-                self.place_entity(ent,
-                                room=room,
-                                pos=(px, 0.0, pz),
-                                dir=base_pd)
+            sink_px = base_px + step[0] * len(sequence)
+            sink_pz = base_pz + step[2] * len(sequence)
 
-            # now place the sink in its own spot—e.g. next to the stove but inset,
-            # or on the adjacent wall, or even as an island in the room.
-            sink_meshes = _flatten(cfg.get("sink", []))
-            if sink_meshes:
-                sink_mesh = self.rng.choice(sink_meshes)
-                sink_ent   = MeshEnt(mesh_name=sink_mesh,
-                                    height=self.SCALE_FACTORS.get(sink_mesh, 1.0))
+            self.place_entity(
+                sink_ent,
+                room=room,
+                pos=(sink_px, 0.6, sink_pz),
+                dir=base_pd,
+            )
 
-                # OPTION A: place sink just after the stove with a corner offset
-                sink_px = base_px + step[0] * len(sequence) 
-                sink_pz = base_pz + step[2] * len(sequence) 
+        # 6) place trash and cupboard on opposite wall
+        opp = (wall + 2) % room.num_walls
+        opp_px, opp_pz, opp_pd, _ = self._wall_setup(room, opp, OFF, OFF)
 
-
-                self.place_entity(sink_ent,
-                                room=room,
-                                pos=(sink_px, 0.6, sink_pz),
-                                dir=base_pd # you can re-use base_pd or rotate 90°
-                               )
-
-            # 6) place trash and cupboard on opposite wall
-            opp = (wall + 2) % room.num_walls
-            if opp == 0:
-                opp_px, opp_pz, opp_pd = x1 - OFF, z0 + OFF, -math.pi/2
-                mid_px, mid_pz = x1 - OFF, cz
-            elif opp == 2:
-                opp_px, opp_pz, opp_pd = x0 + OFF, z0 + OFF, math.pi/2
-                mid_px, mid_pz = x0 + OFF, cz
-            elif opp == 1:
-                opp_px, opp_pz, opp_pd = x0 + OFF, z0 + OFF, 0.0
-                mid_px, mid_pz = cx, z0 + OFF
-            else:
-                opp_px, opp_pz, opp_pd = x0 + OFF, z1 - OFF, math.pi
-                mid_px, mid_pz = cx, z1 - OFF
-
-            # trash bin in the corner
-            trash_list = _flatten(cfg.get("trash", []))
-            if trash_list:
-                mesh_trash = self.rng.choice(trash_list)
-                trash = MeshEnt(mesh_name=mesh_trash, height=self.SCALE_FACTORS.get(mesh_trash, 1.0))
-                self.place_entity(trash, room=room, pos=(opp_px, 0.0, opp_pz), dir=opp_pd)
+        # trash bin in the corner
+        trash_list = self._flatten(cfg.get("trash", []))
+        if trash_list:
+            mesh_trash = self.rng.choice(trash_list)
+            trash = MeshEnt(
+                mesh_name=mesh_trash,
+                height=self.SCALE_FACTORS.get(mesh_trash, 1.0),
+            )
+            self.place_entity(trash, room=room, pos=(opp_px, 0.0, opp_pz), dir=opp_pd)
 
     def _furnish_bathroom(self, rooms, attach_walls):
         """
@@ -652,15 +575,12 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         cfg = self.FURNITURE["bathroom"]
         OFF     = 0.4    # offset from wall
         SPACING = 2.0    # spacing between sink & toilet
-        print(rooms)
 
         # 1) pick the bathroom
         if "bathroom" not in rooms:
-            print("No bathroom room found")
             return
         room        = rooms["bathroom"]
         portal_wall = attach_walls.get("bathroom", None)
-        print(portal_wall)
 
         # 2) choose a free wall
         free_walls = [w for w in range(room.num_walls) if w != portal_wall]
@@ -671,36 +591,15 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         # 3) compute coordinates for that wall
         x0, x1 = room.min_x, room.max_x
         z0, z1 = room.min_z, room.max_z
-        cx, cz = 0.5*(x0 + x1), 0.5*(z0 + z1)
+        cx, cz = self._room_center(room)
 
-        if wall == 0:      # east wall → face west, runs +z
-            base_px, base_pz, base_pd = x1 - OFF, z0 + 1.5, -math.pi/2
-            step = (0.0, 0.0, SPACING)
-        elif wall == 2:    # west wall → face east, runs +z
-            base_px, base_pz, base_pd = x0 + OFF, z0 + 1.5, math.pi/2
-            step = (0.0, 0.0, SPACING)
-        elif wall == 1:    # south wall → face north, runs +x
-            base_px, base_pz, base_pd = x0 + 1.5, z0 + OFF, 0.0
-            step = (SPACING, 0.0, 0.0)
-        else:              # north wall → face south, runs +x
-            base_px, base_pz, base_pd = x0 + 1.5, z1 - OFF, math.pi
-            step = (SPACING, 0.0, 0.0)
+        base_px, base_pz, base_pd, step = self._wall_setup(room, wall, OFF, 1.5, SPACING)
 
         # helper to flatten nested lists
-        def _flatten(items):
-            flat = []
-            for it in items:
-                if isinstance(it, (list, tuple)):
-                    flat.extend(it)
-                else:
-                    flat.append(it)
-            return flat
-
         # 4) place sink then toilet along selected wall
         for i, key in enumerate(["sink", "toilet"]):
-            meshes = _flatten(cfg.get(key, []))
+            meshes = self._flatten(cfg.get(key, []))
             if not meshes:
-                print(f"No meshes found for {key}")
                 continue
             mesh = self.rng.choice(meshes)
             ent  = MeshEnt(
@@ -718,16 +617,9 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
 
         # 5) place bath on the opposite wall, starting from the same corner
         opp_wall = (wall + 2) % room.num_walls
-        if opp_wall == 0:
-            bath_px, bath_pz, bath_pd = x1 - 0.75, z0 + 1.5, -math.pi/2
-        elif opp_wall == 2:
-            bath_px, bath_pz, bath_pd = x0 + 0.75, z0 + 1.5, math.pi/2
-        elif opp_wall == 1:
-            bath_px, bath_pz, bath_pd = x0 + 1.5, z0 + 0.75, 0.0
-        else:
-            bath_px, bath_pz, bath_pd = x0 + 1.5, z1 - 0.75, math.pi
+        bath_px, bath_pz, bath_pd, _ = self._wall_setup(room, opp_wall, 0.75, 1.5)
 
-        bath_meshes = _flatten(cfg.get("bath", []))
+        bath_meshes = self._flatten(cfg.get("bath", []))
         if bath_meshes:
             mesh = self.rng.choice(bath_meshes)
             ent  = MeshEnt(
@@ -746,16 +638,13 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         remaining = set(range(room.num_walls)) - {portal_wall, wall, opp_wall}
         if remaining:
             wash_wall = remaining.pop()
-            if wash_wall == 0:
-                wx, wz, wpd = x1 - OFF, cz, -math.pi/2
-            elif wash_wall == 2:
-                wx, wz, wpd = x0 + OFF, cz, math.pi/2
-            elif wash_wall == 1:
-                wx, wz, wpd = cx, z0 + OFF, 0.0
+            if wash_wall in (0, 2):
+                along = cz - z0
             else:
-                wx, wz, wpd = cx, z1 - OFF, math.pi
+                along = cx - x0
+            wx, wz, wpd, _ = self._wall_setup(room, wash_wall, OFF, along)
 
-            wash_meshes = _flatten(cfg.get("washer", []))
+            wash_meshes = self._flatten(cfg.get("washer", []))
             if wash_meshes:
                 mesh = self.rng.choice(wash_meshes)
                 ent  = MeshEnt(
@@ -791,29 +680,16 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         # 3) compute the wall-center coordinate and facing direction
         x0, x1 = room.min_x, room.max_x
         z0, z1 = room.min_z, room.max_z
-        cx, cz = 0.5*(x0 + x1), 0.5*(z0 + z1)
+        cx, cz = self._room_center(room)
 
-        if wall == 0:       # east wall → face west
-            bed_x, bed_z, bed_dir = x1 - OFF, cz, -math.pi/2
-        elif wall == 2:     # west wall → face east
-            bed_x, bed_z, bed_dir = x0 + OFF, cz,  math.pi/2
-        elif wall == 1:     # south wall → face north
-            bed_x, bed_z, bed_dir = cx,      z0 + OFF, 0.0
-        else:               # north wall → face south
-            bed_x, bed_z, bed_dir = cx,      z1 - OFF, math.pi
-
-        # helper to flatten nested lists/tuples
-        def _flatten(items):
-            flat = []
-            for it in items:
-                if isinstance(it, (list, tuple)):
-                    flat.extend(it)
-                else:
-                    flat.append(it)
-            return flat
+        if wall in (0, 2):
+            offset = cz - z0
+        else:
+            offset = cx - x0
+        bed_x, bed_z, bed_dir, _ = self._wall_setup(room, wall, OFF, offset)
 
         # 4) pick and place the bed
-        bed_list = _flatten(cfg.get("bed", []))
+        bed_list = self._flatten(cfg.get("bed", []))
         if not bed_list:
             return
         bed_mesh = self.rng.choice(bed_list)
