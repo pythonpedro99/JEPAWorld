@@ -762,12 +762,6 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
                 # if we exhaust our tries, skip with a clear warning
                 print(f"Warning: could not place '{mesh_name}' in any free spot of room '{room_name}'")
 
-
-
-
-
-
-
     def create_flat(self):
         rooms, room_positions = {}, []
         attach_walls = {}  # record which wall each room was attached on
