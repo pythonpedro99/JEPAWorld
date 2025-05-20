@@ -181,9 +181,6 @@ class ExpertPolicy:
         print("reached goal")
 
 
-
-
-
     def pick_up(self)-> None:
         """
         Pick up an object at the current agent position.
