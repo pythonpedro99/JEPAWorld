@@ -231,7 +231,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         lx0, lx1 = living.min_x, living.max_x
         lz0, lz1 = living.min_z, living.max_z
         cx, cz = self._room_center(living)
-        p_hw = 0.5  # portal half‐width
+        p_hw = 0.75  # portal half‐width
 
         if wall_idx == 0:  # east wall
             # 1) portal center on living’s east wall (z‐axis midpoint)

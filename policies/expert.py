@@ -115,75 +115,56 @@ class ExpertPolicy:
    
 
     def go_to(self, goal: str) -> None:
-
-        # 2) Plan path (no smoothing)
+        # 1) Plan path (no smoothing)
         path = find_path(self.graph, self.nodes, self.agent_name, goal)
         self.path += path
         waypoints = [self.node_positions[node] for node in path]
         self.waypoints += waypoints
-        print(len(waypoints))
 
+        # 2) Early exit if no path
         if not waypoints:
             print(f"[DEBUG] No waypoints for goal '{goal}'.")
             return
 
-        target_obs = next((o for o in self.obstacles if o.node_name == goal), None)
+        # 3) Compute stopping buffer for the final waypoint
         agent_radius = getattr(self.env.unwrapped.agent, "radius", 0.2)
-        target_buffer = agent_radius + 0.5
-        # if target_obs:
-        #     print(
-        #         f"[DEBUG] Target polygon size=({target_obs.size[0]:.2f},{target_obs.size[1]:.2f})"
-        #     )
+        target_buffer = agent_radius + 0.75
 
-        for idx, (wx, wy) in enumerate(waypoints, start=1):
+        # 4) Iterate through each waypoint
+        for i, (wx, wy) in enumerate(waypoints):
             print(f"\n=== New goal: ({wx:.2f}, {wy:.2f}) ===")
-            is_last = idx == len(waypoints)
-            print(idx)
+            is_last = (i == len(waypoints) - 1)
             buf = target_buffer if is_last else self.waypoint_tolerance
-            print(buf)
+
+            # Track consecutive no-move attempts
+            no_move_count = 0
+
             while True:
-                # current pose
-                x, y    = self.env.unwrapped.agent.pos[0], self.env.unwrapped.agent.pos[2]
+                # 5) Read current pose
+                x, y = self.env.unwrapped.agent.pos[0], self.env.unwrapped.agent.pos[2]
                 yaw_rad = self.env.unwrapped.agent.dir
-                # normalize yaw into [0,360)
                 yaw_deg = (np.degrees(yaw_rad) + 360) % 360
 
-                # vector to goal
+                # 6) Compute distance to current waypoint
                 dx, dy = wx - x, wy - y
                 dist = np.hypot(dx, dy)
 
-                reached = False
-                if is_last and target_obs is not None:
-                    # check distance from agent to the center of the object
-                    cx, cy = target_obs.pos
-                    center_dist = np.hypot(cx - x, cy - y)
-                    reached = center_dist <= target_buffer
-                else:
-                    reached = dist < buf
+                # 7) Debug print
+                print(f"[DEBUG] pos=({x:.2f},{y:.2f})  yaw={yaw_deg:.1f}°  "
+                    f"target=({wx:.2f},{wy:.2f})  dist={dist:.3f}m  buf={buf:.3f}m")
 
-                if reached:
-                    print(
-                        f"[DEBUG] Reached goal: pos=({x:.2f},{y:.2f}) dist={dist:.3f}m\n"
-                    )
+                # 8) Check if reached
+                if dist <= buf:
+                    print(f"[DEBUG] Reached goal: pos=({x:.2f},{y:.2f}) dist={dist:.3f}m\n")
                     break
 
-                # compute desired heading & error
+                # 9) Compute desired heading & error
                 desired_rad = np.arctan2(-dy, dx)
                 desired_deg = (np.degrees(desired_rad) + 360) % 360
-
-                # shortest error in [−180,180)
                 err_rad = ((desired_rad - yaw_rad + np.pi) % (2*np.pi)) - np.pi
                 err_deg = ((desired_deg - yaw_deg + 180) % 360) - 180
 
-                # debug print
-                print(f"[DEBUG] pos=({x:.2f},{y:.2f})  yaw={yaw_deg:.1f}°  "
-                    f"target=({wx:.2f},{wy:.2f})  "
-                    f"dist={dist:.3f}m\n"
-                    f"buf={buf:.2f}m"
-                    f"        desired={desired_deg:.1f}°  err={err_deg:.1f}°  "
-                    f"(tol={np.degrees(self.turn_tol):.1f}°)")
-
-                # turn-in-place
+                # 10) Turn-in-place if needed
                 if abs(err_rad) > self.turn_tol:
                     cmd = 0 if err_rad > 0 else 1
                     obs, _, term, trunc, _ = self.env.step(cmd)
@@ -193,9 +174,10 @@ class ExpertPolicy:
                         print("[DEBUG] Episode timeout.")
                         self._save_episode()
                         return
-                    continue  # re-read pose & re-evaluate
+                    continue
 
-                # move forward
+                # 11) Move forward with no-move detection
+                old_x, old_y = x, y
                 obs, _, term, trunc, _ = self.env.step(2)
                 self.obs.append(obs)
                 self.actions.append(2)
@@ -203,10 +185,22 @@ class ExpertPolicy:
                     print("[DEBUG] Episode timeout.")
                     self._save_episode()
                     return
+
+                # 12) Check if movement occurred
+                new_x, new_y = self.env.unwrapped.agent.pos[0], self.env.unwrapped.agent.pos[2]
+                if (new_x, new_y) == (old_x, old_y):
+                    no_move_count += 1
+                    print(f"[DEBUG] No movement detected (count={no_move_count}).")
+                    if no_move_count >= 3:
+                        print("[DEBUG] Stuck: aborting go_to.")
+                        return
+                else:
+                    no_move_count = 0
                 # loop back to re-fetch pose
 
-        
         print("reached goal")
+
+
 
 
     def pick_up(self)-> None:
