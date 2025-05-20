@@ -129,7 +129,7 @@ class ExpertPolicy:
         target_obs = next((o for o in self.obstacles if o.node_name == goal), None)
         agent_radius = getattr(self.env.unwrapped.agent, "radius", 0.2)
         target_poly = self._obstacle_polygon(target_obs) if target_obs else None
-        target_buffer = agent_radius + 0.05
+        target_buffer = agent_radius + 0.5
         if target_obs:
             print(
                 f"[DEBUG] Target polygon size=({target_obs.size[0]:.2f},{target_obs.size[1]:.2f})"
