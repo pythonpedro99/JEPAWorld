@@ -116,7 +116,18 @@ class ExpertPolicy:
 
     def go_to(self, goal: str) -> None:
         # 1) Plan path (no smoothing)
-        path = find_path(self.graph, self.nodes, self.agent_name, goal)
+        # Determine the nearest graph node to the agent's current position
+        agent_pos = (
+            float(self.env.unwrapped.agent.pos[0]),
+            float(self.env.unwrapped.agent.pos[2]),
+        )
+        path = find_path(
+            self.graph,
+            self.nodes,
+            agent_pos,
+            goal,
+            node_positions=self.node_positions,
+        )
         self.path += path
         waypoints = [self.node_positions[node] for node in path]
         self.waypoints += waypoints

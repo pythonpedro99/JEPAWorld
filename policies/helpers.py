@@ -1,10 +1,7 @@
 
-import numpy as np
-from dataclasses import dataclass
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 import networkx as nx
-import numpy as np
 import numpy as np
 
 @dataclass
@@ -66,20 +63,50 @@ class GraphData:
     obstacles: List[Obstacle]
 
 
+def closest_node(node_positions: Dict[str, Tuple[float, float]], pos: Tuple[float, float]) -> str:
+    """Return the node id closest to the given position."""
+    px, py = pos
+    best = None
+    best_dist = float('inf')
+    for name, (nx_pos, ny_pos) in node_positions.items():
+        dist = (nx_pos - px) ** 2 + (ny_pos - py) ** 2
+        if dist < best_dist:
+            best_dist = dist
+            best = name
+    return best
+
+
 def find_path(
     graph: nx.Graph,
     nodes: List[str],
-    start: str,
-    goal: str
+    start: str | Tuple[float, float],
+    goal: str,
+    node_positions: Optional[Dict[str, Tuple[float, float]]] = None,
 ) -> Optional[List[str]]:
-        
+
+    """Return the shortest path from ``start`` to ``goal``.
+
+    ``start`` may be either a node id or an ``(x, y)`` coordinate. In the latter
+    case ``node_positions`` must be provided and the nearest node to the
+    coordinate will be used as the starting node.
+    """
+
+    if isinstance(start, (tuple, list)):
+        if node_positions is None:
+            raise ValueError("node_positions required when start is coordinates")
+        start = closest_node(node_positions, tuple(start))
+        print(f"start {start}")
+    print(f"Finding path from {start} to {goal} in graph with nodes {nodes}")
+
     if not graph.has_node(start) or not graph.has_node(goal):
         return None
+
     to_remove = set(nodes) - {start, goal}
     G = graph.copy()
     G.remove_nodes_from(to_remove)
     if not G.has_node(start) or not G.has_node(goal):
         return None
+
     try:
         return nx.dijkstra_path(G, start, goal, weight="weight")
     except nx.NetworkXNoPath:

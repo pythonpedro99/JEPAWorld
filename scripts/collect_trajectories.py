@@ -218,7 +218,7 @@ class CollectTrajectories:
                     portal_idx += 1
 
         # 2) Add agent and obstacle nodes
-        node_positions["agent"] = tuple(self.graph_data.agent.pos)
+        #node_positions["agent"] = tuple(self.graph_data.agent.pos)
         for obs in self.graph_data.obstacles:
             node_positions[obs.node_name] = tuple(obs.pos)
 
@@ -323,10 +323,11 @@ class CollectTrajectories:
         
 
         # 6) Return graph, all node positions, and obstacle names
+        obstacle_nodes = list(node_positions.keys())
         return (
             graph,
             node_positions,
-            [obs.node_name for obs in self.graph_data.obstacles],
+            obstacle_nodes,
         )
 
 
