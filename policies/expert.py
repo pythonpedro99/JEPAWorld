@@ -102,7 +102,7 @@ class ExpertPolicy:
                 self.go_to(target)
             elif action == "pick_up":
                 self.pick_up()
-            elif action in ("put_down", "drop"):
+            elif action in ("drop"):
                 self.drop()
             elif action == "toggle":
                 self.toggle()
@@ -138,7 +138,7 @@ class ExpertPolicy:
 
             # Track consecutive no-move attempts
             no_move_count = 0
-            self.scan_room(sweep_steps=3)
+            #self.scan_room(sweep_steps=3)
 
             while True:
                 # 5) Read current pose

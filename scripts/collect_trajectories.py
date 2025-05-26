@@ -27,7 +27,7 @@ class CollectTrajectories:
         self.env.reset()
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=1.7, k_neighbors=4, jitter_ratio=0.4, min_samples=0, min_dist=0.5
+            sample_density=1.7, k_neighbors=4, jitter_ratio=0.1, min_samples=0, min_dist=0.5
         )
         agent_node = next(
          (n for n in self.nodes if n.startswith("agent")),
@@ -70,8 +70,21 @@ class CollectTrajectories:
         if not candidates:
             raise ValueError("No movable objects found in nodes")
 
-        target = random.choice(candidates)
-        return [("go_to", target),("pick_up", "")] 
+        target_movable = random.choice(candidates)
+
+        # Pick a random node to drop the movable at.  Exclude the movable
+        # itself and the agent start position to avoid degenerate missions.
+        drop_candidates = [n for n in self.nodes if n not in {target_movable, self.agent}]
+        if not drop_candidates:
+            raise ValueError("No valid drop location found in nodes")
+        drop_target = random.choice(drop_candidates)
+
+        return [
+            ("go_to", target_movable),
+            ("pick_up", ""),
+            ("go_to", drop_target),
+            ("drop", ""),
+        ] 
 
     def get_graph_data(self) -> GraphData:
         """
