@@ -708,9 +708,8 @@ class MiniWorldEnv(gym.Env):
         if carrying:
             next_carrying_pos = self._get_carry_pos(next_pos, carrying)
 
-            if self.intersect(carrying, next_carrying_pos, carrying.radius):
-                return False
-
+            # if self.intersect(carrying, next_carrying_pos, carrying.radius):
+            #     return False
             carrying.pos = next_carrying_pos
 
         self.agent.pos = next_pos
@@ -731,10 +730,10 @@ class MiniWorldEnv(gym.Env):
         if carrying:
             pos = self._get_carry_pos(self.agent.pos, carrying)
 
-            if self.intersect(carrying, pos, carrying.radius):
-                self.agent.dir = orig_dir
-                return False
-
+            # Ignore collisions for the carried object during turns as well,
+            # mirroring the behaviour in ``move_agent``. This keeps the agent
+            # responsive even when the carried item would normally clip into
+            # the environment.
             carrying.pos = pos
             carrying.dir = self.agent.dir
 
