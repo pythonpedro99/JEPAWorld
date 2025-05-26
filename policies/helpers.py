@@ -102,6 +102,7 @@ def find_path(
         return None
 
     to_remove = set(nodes) - {start, goal}
+    print(f"Removing nodes: {to_remove}")
     G = graph.copy()
     G.remove_nodes_from(to_remove)
     if not G.has_node(start) or not G.has_node(goal):

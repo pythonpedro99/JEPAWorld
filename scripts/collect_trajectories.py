@@ -323,7 +323,7 @@ class CollectTrajectories:
         
 
         # 6) Return graph, all node positions, and obstacle names
-        obstacle_nodes = list(node_positions.keys())
+        obstacle_nodes = [obs.node_name for obs in self.graph_data.obstacles]
         return (
             graph,
             node_positions,
