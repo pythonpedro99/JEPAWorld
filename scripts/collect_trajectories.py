@@ -15,7 +15,7 @@ register(
     id="JEPAWorld-v0",
     entry_point="miniworld.envs.jepaworld:JEPAWorld",
     max_episode_steps=500,
-    kwargs={"seed":random.randint(0, 2**31 - 1)},   # any default kwargs your ctor needs;  random.randint(0, 2**31 - 1)
+    kwargs={"seed":0},   # any default kwargs your ctor needs;  random.randint(0, 2**31 - 1)
 )
 
 class CollectTrajectories:
@@ -23,7 +23,7 @@ class CollectTrajectories:
     def __init__(self):
         
         # Basics 
-        self.env = gym.make("JEPAWorld-v0", seed=6)
+        self.env = gym.make("JEPAWorld-v0", seed= random.randint(0, 2**31 - 1))
         self.env.reset()
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
@@ -74,7 +74,11 @@ class CollectTrajectories:
 
         # Pick a random node to drop the movable at.  Exclude the movable
         # itself and the agent start position to avoid degenerate missions.
-        drop_candidates = [n for n in self.nodes if n not in {target_movable, self.agent}]
+        drop_candidates = [
+            n
+            for n in self.node_positions.keys()
+            if n not in {target_movable, self.agent}
+        ]
         if not drop_candidates:
             raise ValueError("No valid drop location found in nodes")
         drop_target = random.choice(drop_candidates)
