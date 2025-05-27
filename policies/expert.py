@@ -41,7 +41,8 @@ class ExpertPolicy:
         nodes_positions,
         obstacles,
         mission: list[str],
-        agent_name
+        agent_name,
+        dataset_dir: str | None = None,
     ):
         # Basics
         self.env = env
@@ -54,6 +55,7 @@ class ExpertPolicy:
         self.actions = []
         self.path = []
         self.agent_name = agent_name
+        self.dataset_dir = dataset_dir
 
         # Debugging
         self.waypoints = []
@@ -72,43 +74,50 @@ class ExpertPolicy:
         self.waypoint_tolerance = 0.2  # tolerance for reaching waypoints
         self.lookahead_distance = 0.5  # distance to look ahead for the next waypoint
 
-    def _save_episode(self) -> None:
-        """Persist collected observations and actions."""
+    def _save_episode(self) -> int:
+        """Persist collected observations and actions and reset buffers."""
         if not self.obs:
-            return
+            return 0
+        out_dir = self.dataset_dir or "/tmp/jepa_dataset"
         save_data_batch(
             self.obs,
             self.actions,
-            "/Users/julianquast/Documents/Bachelor Thesis/Datasets",
+            out_dir,
         )
+        count = len(self.obs)
+        self.obs = []
+        self.actions = []
+        return count
 
-    def solve_mission(self) -> None:
+    def solve_mission(self) -> bool:
         """
         Execute self.mission, which should be a list of (action, target) tuples.
         - action: one of "go_to", "pick_up", "put_down"/"drop", "toggle"
         - target: for "go_to" either a node‐name (str) or an (x,y) tuple;
                     ignored (None) for other actions.
         """
+        success = True
         for action, target in self.mission:
             if action == "go_to":
-                # target can be a node‐name or a raw (x,y) coordinate
-                self.go_to(target)
-                #self.env.place_agent(pos=(1.,0.0,1.0), dir=0.0)
+                ok = self.go_to(target)
             elif action == "pick_up":
-                self.pick_up()
+                ok = self.pick_up()
             elif action in ("drop"):
-                self.drop()
+                ok = self.drop()
             elif action == "toggle":
-                self.toggle()
+                ok = self.toggle()
             else:
                 raise ValueError(f"[solve_mission] unknown action '{action}'")
+            if not ok:
+                success = False
+                break
 
         # finally, dump the collected observations & actions
         self._save_episode()
-    
+        return success
    
 
-    def go_to(self, goal: str) -> None:
+    def go_to(self, goal: str) -> bool:
         # 1) Plan path (no smoothing)
         # Determine the nearest graph node to the agent's current position
         agent_pos = (
@@ -129,7 +138,7 @@ class ExpertPolicy:
         # 2) Early exit if no path
         if not waypoints:
             print(f"[DEBUG] No waypoints for goal '{goal}'.")
-            return
+            return False
 
         # 3) Compute stopping buffer for the final waypoint
         agent_radius = getattr(self.env.unwrapped.agent, "radius", 0.2)
@@ -179,7 +188,7 @@ class ExpertPolicy:
                     if term or trunc:
                         print("[DEBUG] Episode timeout.")
                         self._save_episode()
-                        return
+                        return False
                     continue
 
                 # 11) Move forward with no-move detection
@@ -190,7 +199,7 @@ class ExpertPolicy:
                 if term or trunc:
                     print("[DEBUG] Episode timeout.")
                     self._save_episode()
-                    return
+                    return False
 
                 # 12) Check if movement occurred
                 new_x, new_y = self.env.unwrapped.agent.pos[0], self.env.unwrapped.agent.pos[2]
@@ -199,13 +208,13 @@ class ExpertPolicy:
                     print(f"[DEBUG] No movement detected (count={no_move_count}).")
                     if no_move_count >= 5:
                         print("[DEBUG] Stuck: aborting go_to.")
-                        return
+                        return False
                 else:
                     no_move_count = 0
                 # loop back to re-fetch pose
 
         print("reached goal")
-
+        return True
     def scan_room(self, sweep_steps: int = 5) -> None:
         """
         Perform a left-right-left rotation to survey the room interior.
@@ -253,7 +262,7 @@ class ExpertPolicy:
 
 
 
-    def pick_up(self)-> None:
+    def pick_up(self) -> bool:
         """
         Pick up an object at the current agent position.
         """
@@ -263,9 +272,10 @@ class ExpertPolicy:
         if term or trunc:
             print("[DEBUG] Episode timeout.")
             self._save_episode()
-        return
+            return False
+        return self.env.unwrapped.agent.carrying is not None
 
-    def drop(self):
+    def drop(self) -> bool:
         """
         Drop an object at the current agent position.
         """
@@ -275,9 +285,10 @@ class ExpertPolicy:
         if term or trunc:
             print("[DEBUG] Episode timeout.")
             self._save_episode()
-        return
+            return False
+        return self.env.unwrapped.agent.carrying is None
 
-    def toogle(self):
+    def toogle(self) -> bool:
         """
         Toggle the state of an object at the current agent position.
         """
@@ -287,7 +298,8 @@ class ExpertPolicy:
         if term or trunc:
             print("[DEBUG] Episode timeout.")
             self._save_episode()
-        return
+            return False
+        return True
 
     def check_surroundings(self):
         """
