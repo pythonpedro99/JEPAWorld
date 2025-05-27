@@ -179,32 +179,40 @@ class CollectTrajectories:
         node_positions: Dict[str, Tuple[float, float]] = {}
 
         portal_offset = 0.3
-        portal_nodes: Dict[Tuple[float, float], str] = {}
+        #portal_nodes: Dict[Tuple[float, float], str] = {}
+        portal_pairs: Dict[Tuple[float, float], str] = {}
         portal_idx = 0
         for room in self.graph_data.rooms:
             poly = room_polygons[room.id]
             for p in room.portals:
                 mid_pt = (float(p.midpoint[0]), float(p.midpoint[1]))
                 key = (round(mid_pt[0], 3), round(mid_pt[1], 3))
-                if key not in portal_nodes:
-                    # compute perpendicular to portal edge
-                    start = np.array(p.start)
-                    end = np.array(p.end)
-                    dir_vec = end - start
-                    norm = np.linalg.norm(dir_vec)
-                    unit = dir_vec / norm if norm > 0 else np.array([1.0, 0.0])
-                    perp = np.array([-unit[1], unit[0]])
+                start = np.array(p.start)
+                end = np.array(p.end)
+                dir_vec = end - start
+                norm = np.linalg.norm(dir_vec)
+                unit = dir_vec / norm if norm > 0 else np.array([1.0, 0.0])
+                perp = np.array([-unit[1], unit[0]])
 
-                    # offset candidates
-                    cand1 = np.array(mid_pt) + perp * portal_offset
-                    cand2 = np.array(mid_pt) - perp * portal_offset
-                    # choose the point inside the room polygon
-                    pos = cand1 if poly.contains(Point(*cand1)) else cand2
+                # offset candidates
+                cand1 = np.array(mid_pt) + perp * portal_offset
+                cand2 = np.array(mid_pt) - perp * portal_offset
+                # choose the point inside the room polygon
+                pos = cand1 if poly.contains(Point(*cand1)) else cand2
 
-                    name = f"_portal_{portal_idx}"
-                    portal_nodes[key] = name
-                    node_positions[name] = (float(pos[0]), float(pos[1]))
-                    portal_idx += 1
+                name = f"_portal_{portal_idx}"
+                node_positions[name] = (float(pos[0]), float(pos[1]))
+
+                if key in portal_pairs:
+                    # connect both sides of the same doorway
+                    other = portal_pairs[key]
+                    seg = LineString([node_positions[other], pos])
+                    if not any(buf.intersects(seg) for buf in obstacle_buffers.values()):
+                        graph.add_edge(name, other, weight=seg.length)
+                else:
+                    portal_pairs[key] = name
+
+                portal_idx += 1
 
         # 2) Add agent and obstacle nodes
         #node_positions["agent"] = tuple(self.graph_data.agent.pos)
