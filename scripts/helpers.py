@@ -127,7 +127,9 @@ def plot_prm_graph(
 def save_data_batch(
     obs_list: Sequence[np.ndarray],
     action_list: Sequence,
-    base_dir: Union[str, Path]
+    base_dir: Union[str, Path],
+    *,
+    csv_name: str | None = None,
 ) -> None:
     """
     Save a batch of RGB images and all their corresponding actions in one CSV.
@@ -186,9 +188,16 @@ def save_data_batch(
     action_matrix = np.vstack(flat_actions)
 
     # 3) Save the single CSV
-    action_csv = act_dir / f"{stem_base}_actions.csv"
-    # one row per action, comma-delimited
-    np.savetxt(action_csv, action_matrix, delimiter=",", fmt="%s")
+     # 3) Save the actions CSV. When csv_name is provided, append to that file
+    if csv_name is None:
+        action_csv = act_dir / f"{stem_base}_actions.csv"
+        mode = "wb"
+    else:
+        action_csv = act_dir / csv_name
+        mode = "ab" if action_csv.exists() else "wb"
+
+    with open(action_csv, mode) as fh:
+        np.savetxt(fh, action_matrix, delimiter=",", fmt="%s")
 
     return None
 

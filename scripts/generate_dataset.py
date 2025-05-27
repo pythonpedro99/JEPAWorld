@@ -13,6 +13,7 @@ from gymnasium.envs.registration import register
 
 from policies.expert import ExpertPolicy
 from policies.helpers import Agent, GraphData, Obstacle, Portal, Room
+from scripts.helpers import plot_prm_graph
 
 
 register(
@@ -353,7 +354,15 @@ class DatasetGenerator:
 
         policy.actions.append(-1)
         self.frames_collected += policy._save_episode()
-        self.env.place_agent()
+        self.env.unwrapped.place_agent()
+        plot_prm_graph(
+                self.graph_data,
+                self.graph,
+                self.node_positions,
+                self.nodes,
+                highlight_path=policy.path,
+                smoothed_curve=None,
+            )
         return True
 
     # ------------------------------------------------------------------
@@ -366,6 +375,8 @@ class DatasetGenerator:
 
             if self._run_mission():
                 missions_in_env += 1
+            
+        
 
 
 def main() -> None:

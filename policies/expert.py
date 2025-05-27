@@ -81,6 +81,7 @@ class ExpertPolicy:
             self.obs,
             self.actions,
             out_dir,
+            csv_name="actions.csv",
         )
         count = len(self.obs)
         self.obs = []
