@@ -14,6 +14,7 @@ from gymnasium.envs.registration import register
 from policies.expert import ExpertPolicy
 from policies.helpers import Agent, GraphData, Obstacle, Portal, Room
 from scripts.helpers import plot_prm_graph
+from Miniworld.miniworld.entity import MeshEnt
 
 
 register(
@@ -40,6 +41,7 @@ class DatasetGenerator:
         self.node_positions: Dict[str, Tuple[float, float]] | None = None
         self.nodes: List[str] | None = None
         self.agent_node: str | None = None
+        self.current_movable = None
 
         self._new_env()
 
@@ -52,7 +54,11 @@ class DatasetGenerator:
         self.env = gym.make("JEPAWorld-v0", seed=random.randint(0, 2**31 - 1))
         self.env.reset()
         print (f"New environment created: ")
+        self.current_movable = None
+        self._update_graph()
 
+
+    def _update_graph(self) -> None:
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
             sample_density=3.0,
@@ -66,6 +72,29 @@ class DatasetGenerator:
     # ------------------------------------------------------------------
     # Mission helpers
     # ------------------------------------------------------------------
+    
+    def _create_random_movable(self) -> None:
+        movables = self.env.unwrapped.FURNITURE["living_room"].get("movables", [])
+        if not movables:
+            return
+        mesh = random.choice(movables)
+        height = self.env.unwrapped.SCALE_FACTORS.get(mesh, 0.1)
+        ent = MeshEnt(mesh_name=mesh, height=height, static=False)
+        room = random.choice(self.env.unwrapped.rooms)
+        self.env.unwrapped.place_entity(ent, room=room)
+        self.current_movable = ent
+
+    def _remove_current_movable(self) -> None:
+        if self.current_movable is None:
+            return
+        if self.env.unwrapped.agent.carrying is self.current_movable:
+            self.env.unwrapped.agent.carrying = None
+        if self.current_movable in self.env.unwrapped.entities:
+            self.env.unwrapped.entities.remove(self.current_movable)
+        self.current_movable = None
+    
+    
+    
     def _select_random_movable(self) -> Tuple[str, str]:
         movables = ["duckie", "chips", "handy", "keys", "towl","dish"]
 
@@ -309,6 +338,9 @@ class DatasetGenerator:
 
     # ------------------------------------------------------------------
     def _run_mission(self) -> bool:
+        
+        self._create_random_movable()
+        self._update_graph()
         pick, drop_target = self._select_random_movable()
 
         policy = ExpertPolicy(
@@ -330,12 +362,16 @@ class DatasetGenerator:
             success = policy.go_to(pick)
             attempts += 1
         if not success:
+            self.env.unwrapped.place_agent()
+            self._remove_current_movable()
             return False
 
         success = policy.pick_up()
         if not success or not self.env.unwrapped.agent.carrying:
             policy.obs = []
             policy.actions = []
+            self.env.unwrapped.place_agent()
+            self._remove_current_movable()
             return False
 
         attempts = 0
@@ -351,19 +387,22 @@ class DatasetGenerator:
                 attempts += 1
 
         if not drop_success:
+            self.env.unwrapped.place_agent()
+            self._remove_current_movable()
             return False
 
         policy.actions.append(-1)
         self.frames_collected += policy._save_episode()
         self.env.unwrapped.place_agent()
-        # plot_prm_graph(
-        #         self.graph_data,
-        #         self.graph,
-        #         self.node_positions,
-        #         self.nodes,
-        #         highlight_path=policy.path,
-        #         smoothed_curve=None,
-        #     )
+        self._remove_current_movable()
+        plot_prm_graph(
+                self.graph_data,
+                self.graph,
+                self.node_positions,
+                self.nodes,
+                highlight_path=policy.path,
+                smoothed_curve=None,
+            )
         return True
 
     # ------------------------------------------------------------------
@@ -381,7 +420,7 @@ class DatasetGenerator:
 
 
 def main() -> None:
-    generator = DatasetGenerator(num_frames=100, output_dir="/Users/julianquast/Documents/Bachelor Thesis/Datasets")
+    generator = DatasetGenerator(num_frames=50, output_dir="/Users/julianquast/Documents/Bachelor Thesis/Datasets")
     generator.generate()
 
 
