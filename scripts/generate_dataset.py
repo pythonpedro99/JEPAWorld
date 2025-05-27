@@ -68,7 +68,7 @@ class DatasetGenerator:
     def _update_graph(self) -> None:
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=3.0,
+            sample_density=2.0,
             k_neighbors=9,
             jitter_ratio=0.0,
             min_samples=0,
@@ -80,8 +80,6 @@ class DatasetGenerator:
     # Mission helpers
     # ------------------------------------------------------------------
     
-
-
     def _remove_current_movable(self) -> None:
         if self.current_movable is None:
             return
