@@ -207,7 +207,7 @@ class ExpertPolicy:
 
                 # 12) Check if movement occurred
                 new_x, new_y = self.env.unwrapped.agent.pos[0], self.env.unwrapped.agent.pos[2]
-                if (new_x, new_y) == (old_x, old_y):
+                if np.hypot(new_x - old_x, new_y - old_y) < 1e-3:
                     no_move_count += 1
                     print(f"[DEBUG] No movement detected (count={no_move_count}).")
                     if no_move_count >= 5:

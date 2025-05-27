@@ -51,6 +51,7 @@ class DatasetGenerator:
             self.env.close()
         self.env = gym.make("JEPAWorld-v0", seed=random.randint(0, 2**31 - 1))
         self.env.reset()
+        print (f"New environment created: ")
 
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
@@ -66,7 +67,7 @@ class DatasetGenerator:
     # Mission helpers
     # ------------------------------------------------------------------
     def _select_random_movable(self) -> Tuple[str, str]:
-        movables = ["duckie", "chips", "handy", "keys", "towl"]
+        movables = ["duckie", "chips", "handy", "keys", "towl","dish"]
 
         candidates = [
             node for node in self.nodes if any(node.startswith(m) for m in movables)
@@ -355,14 +356,14 @@ class DatasetGenerator:
         policy.actions.append(-1)
         self.frames_collected += policy._save_episode()
         self.env.unwrapped.place_agent()
-        plot_prm_graph(
-                self.graph_data,
-                self.graph,
-                self.node_positions,
-                self.nodes,
-                highlight_path=policy.path,
-                smoothed_curve=None,
-            )
+        # plot_prm_graph(
+        #         self.graph_data,
+        #         self.graph,
+        #         self.node_positions,
+        #         self.nodes,
+        #         highlight_path=policy.path,
+        #         smoothed_curve=None,
+        #     )
         return True
 
     # ------------------------------------------------------------------
@@ -373,14 +374,14 @@ class DatasetGenerator:
                 self._new_env()
                 missions_in_env = 0
 
-            if self._run_mission():
-                missions_in_env += 1
+            self._run_mission()
+            missions_in_env += 1
             
         
 
 
 def main() -> None:
-    generator = DatasetGenerator(num_frames=50, output_dir="dataset")
+    generator = DatasetGenerator(num_frames=100, output_dir="/Users/julianquast/Documents/Bachelor Thesis/Datasets")
     generator.generate()
 
 

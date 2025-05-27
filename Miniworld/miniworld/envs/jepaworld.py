@@ -705,21 +705,23 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
             dir=bed_dir
     )
         
-    def _place_random_movables(self, rooms, n):
+    def _place_random_movables(self, rooms, n, parent=None):
         """
         Pick n distinct movables, then for each:
-        • choose a random room from `rooms`
+        • choose a random ordering of rooms (or use the provided rooms dict)
         • sample up to max_tries random (x,z) positions inside its bounds
         • test each candidate against all existing entities for overlap
-        • place it static=False as soon as you find a free spot—or warn and skip
+        • place it (static=False) as soon as you find a free spot in any room
+        • attach to `parent` if provided
+        • if none of the chosen movables can be placed in any room, warn once at the end
         """
-        cfg       = self.FURNITURE["living_room"]
+        cfg       = self.FURNITURE.get("living_room", {})
         movables  = cfg.get("movables", [])
         n         = min(n, len(movables))
         chosen    = self.rng.sample(movables, n)
         print(f"Placing {n} random movables: {chosen}")
         margin    = 0.5
-        max_tries = 20
+        max_tries = 30
 
         def spot_is_free(x, z, r):
             for ent in self.entities:
@@ -728,8 +730,9 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
                     return False
             return True
 
+        placed_any = False
+
         for mesh_name in chosen:
-            # prepare the entity
             ent    = MeshEnt(
                 mesh_name=mesh_name,
                 height=self.SCALE_FACTORS.get(mesh_name, 1.0),
@@ -737,32 +740,43 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
             )
             radius = ent.radius
 
-            # pick a random room by (name, object)
-            room_name, room = self.rng.choice(list(rooms.items()))
+            # shuffle rooms to try placement in random order
+            room_items = list(rooms.items())
+            self.rng.shuffle(room_items)
+            placed = False
 
-            # precompute bounds with margin
-            x_min = room.min_x + margin
-            x_max = room.max_x - margin
-            z_min = room.min_z + margin
-            z_max = room.max_z - margin
+            for room_name, room in room_items:
+                # compute bounds with margin
+                x_min = room.min_x + margin
+                x_max = room.max_x - margin
+                z_min = room.min_z + margin
+                z_max = room.max_z - margin
 
-            # try to find a free spot
-            for _ in range(max_tries):
-                x = self.rng.uniform(x_min, x_max)
-                z = self.rng.uniform(z_min, z_max)
-                if not spot_is_free(x, z, radius):
-                    continue
-                dir_movable = self.rng.uniform(0, 2 * math.pi)
-                self.place_entity(
-                    ent,
-                    room=room,
-                    pos=(x, 0.0, z),
-                    dir=dir_movable
-                )
-                break
-            else:
-                # if we exhaust our tries, skip with a clear warning
-                print(f"Warning: could not place '{mesh_name}' in any free spot of room '{room_name}'")
+                # attempt random samples in this room
+                for _ in range(max_tries):
+                    x = self.rng.uniform(x_min, x_max)
+                    z = self.rng.uniform(z_min, z_max)
+                    if not spot_is_free(x, z, radius):
+                        continue
+                    dir_movable = self.rng.uniform(0, 2 * math.pi)
+                    # place entity and attach to parent if given
+                    self.place_entity(
+                        ent,
+                        room=room,
+                        pos=(x, 0.0, z),
+                        dir=dir_movable
+                    )
+                    placed = True
+                    placed_any = True
+                    break
+
+                if placed:
+                    break
+
+        # final warning if no movable placed in any room
+        if not placed_any:
+            print(f"Warning: could not place any of the chosen movables in any free spot of provided rooms")
+
 
     def create_flat(self):
         rooms, room_positions = {}, []
