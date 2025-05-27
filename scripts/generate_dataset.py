@@ -38,7 +38,7 @@ class DatasetGenerator:
         self.graph: nx.Graph | None = None
         self.node_positions: Dict[str, Tuple[float, float]] | None = None
         self.nodes: List[str] | None = None
-        self.agent_node: str | None = None
+        #self.agent_node: str | None = None
 
         self._new_env()
 
@@ -59,7 +59,7 @@ class DatasetGenerator:
             min_samples=0,
             min_dist=0.1,
         )
-        self.agent_node = next(n for n in self.nodes if n.startswith("agent"))
+        #self.agent_node = next(n for n in self.nodes if n.startswith("agent"))
 
     # ------------------------------------------------------------------
     # Mission helpers
@@ -316,7 +316,6 @@ class DatasetGenerator:
             self.node_positions,
             self.graph_data.obstacles,
             [],
-            self.agent_node,
             dataset_dir=self.output_dir,
         )
 
@@ -365,7 +364,7 @@ class DatasetGenerator:
 
 
 def main() -> None:
-    generator = DatasetGenerator(num_frames=100, output_dir="dataset")
+    generator = DatasetGenerator(num_frames=50, output_dir="dataset")
     generator.generate()
 
 

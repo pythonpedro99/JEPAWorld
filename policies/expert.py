@@ -41,7 +41,6 @@ class ExpertPolicy:
         nodes_positions,
         obstacles,
         mission: list[str],
-        agent_name,
         dataset_dir: str | None = None,
     ):
         # Basics
@@ -54,7 +53,6 @@ class ExpertPolicy:
         self.obs = []
         self.actions = []
         self.path = []
-        self.agent_name = agent_name
         self.dataset_dir = dataset_dir
 
         # Debugging
@@ -131,6 +129,11 @@ class ExpertPolicy:
             goal,
             node_positions=self.node_positions,
         )
+
+        if path is None:
+            print(f"[DEBUG] No path found for goal '{goal}'.")
+            return False
+
         self.path += path
         waypoints = [self.node_positions[node] for node in path]
         self.waypoints += waypoints
