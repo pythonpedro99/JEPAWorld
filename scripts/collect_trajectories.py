@@ -7,7 +7,6 @@ import networkx as nx
 import numpy as np
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely import affinity
-from scripts.helpers import plot_prm_graph
 from policies.expert import ExpertPolicy
 from policies.helpers import GraphData,Agent, Obstacle, Room, Portal
 from gymnasium.envs.registration import register
@@ -19,11 +18,11 @@ register(
 )
 
 class CollectTrajectories:
-    
-    def __init__(self):
-        
-        # Basics 
-        self.env = gym.make("JEPAWorld-v0", seed= random.randint(0, 2**31 - 1))
+
+    def __init__(self, env_name: str = "JEPAWorld-v0"):
+
+        # Basics
+        self.env = gym.make(env_name, seed=random.randint(0, 2**31 - 1))
         self.env.reset()
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
@@ -36,20 +35,6 @@ class CollectTrajectories:
         if agent_node is None:
             raise RuntimeError("No Agent node found in self.nodes")
         self.agent = agent_node
-        self.mission = self._select_random_movable()
-        print("Mission:", self.mission)
-
-        #expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
-        #expert_policy.solve_mission()
-  
-        plot_prm_graph(
-            self.graph_data,
-            self.graph,
-            self.node_positions,
-            self.nodes,
-            #highlight_path= expert_policy.path,
-            #smoothed_curve= expert_policy.smoothed_waypoints
-        )
 
     # Functions
 
@@ -88,7 +73,11 @@ class CollectTrajectories:
             ("pick_up", ""),
             ("go_to", drop_target),
             ("drop", ""),
-        ] 
+        ]
+
+    def random_node(self) -> str:
+        """Return a random node from the roadmap."""
+        return random.choice(list(self.node_positions.keys()))
 
     def get_graph_data(self) -> GraphData:
         """
@@ -339,5 +328,65 @@ class CollectTrajectories:
 
 
 
+def create_dataset(
+    expert: bool = True,
+    num_frames: int = 1000,
+    base_dir: str = "datasets",
+    fail_rate: float = 0.1,
+) -> None:
+    """Collect a dataset of expert trajectories in JEPAWorld."""
+
+    if not expert:
+        raise NotImplementedError("Only expert dataset creation is supported")
+
+    collector = CollectTrajectories("JEPAWorld-v0")
+
+    collected = 0
+
+    while collected < num_frames:
+        mission = collector._select_random_movable()
+
+        # 50% chance to add a second object mission for variety (long missions)
+        if random.random() < 0.5:
+            mission += collector._select_random_movable()
+
+        # Inject occasional failures
+        if random.random() < fail_rate:
+            fail_type = random.choice(["random_node", "target_pickup"])
+            if fail_type == "random_node":
+                wrong = collector.random_node()
+                # ensure not using the correct nodes when possible
+                avoid = {mission[0][1], mission[2][1]}
+                while wrong in avoid:
+                    wrong = collector.random_node()
+                mission[0] = ("go_to", wrong)
+            else:  # target_pickup
+                mission[0] = ("go_to", mission[2][1])
+
+        # move to a random point before starting next mission
+        mission.append(("go_to", collector.random_node()))
+
+        policy = ExpertPolicy(
+            collector.env,
+            collector.graph,
+            collector.nodes,
+            collector.node_positions,
+            collector.graph_data.obstacles,
+            mission,
+            collector.agent,
+            base_dir=base_dir,
+        )
+
+        frames = policy.solve_mission()
+
+        if frames == 0:
+            # infeasible, try another mission
+            continue
+
+        collected += frames
+
+    collector.env.close()
+
+
 if __name__ == "__main__":
-    CollectTrajectories()
+    create_dataset(True, 100)

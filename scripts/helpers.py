@@ -127,7 +127,8 @@ def plot_prm_graph(
 def save_data_batch(
     obs_list: Sequence[np.ndarray],
     action_list: Sequence,
-    base_dir: Union[str, Path]
+    base_dir: Union[str, Path],
+    mission_end: Optional[Sequence[int]] = None,
 ) -> None:
     """
     Save a batch of RGB images and all their corresponding actions in one CSV.
@@ -139,13 +140,21 @@ def save_data_batch(
         obs_list:    A sequence of H×W×3 uint8 RGB arrays (or floats in [0,1]).
         action_list: A sequence of array‐like or scalar actions (one per obs).
         base_dir:    Directory where `images/` and `actions/` folders will be created.
+        mission_end: Optional sequence of flags (0/1) marking the last frame of a
+                     mission. Length must equal ``obs_list`` when provided.
 
     Returns:
         A tuple of (list_of_image_paths, action_csv_path).
     """
     if len(obs_list) != len(action_list):
-        raise ValueError(f"Expected same length for obs_list and action_list, "
-                         f"got {len(obs_list)} vs {len(action_list)}")
+        raise ValueError(
+            f"Expected same length for obs_list and action_list, "
+            f"got {len(obs_list)} vs {len(action_list)}"
+        )
+    if mission_end is not None and len(mission_end) != len(obs_list):
+        raise ValueError(
+            "mission_end must match length of observations when provided"
+        )
 
     base = Path(base_dir)
     img_dir = base / "images"
@@ -178,6 +187,8 @@ def save_data_batch(
     flat_actions = []
     for idx, action in enumerate(action_list, start=1):
         arr = np.atleast_1d(action).reshape(-1)
+        if mission_end is not None:
+            arr = np.concatenate([arr, [int(mission_end[idx - 1])]])
         flat_actions.append(arr)
     # Ensure all rows have same length
     lengths = [a.size for a in flat_actions]

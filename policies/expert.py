@@ -41,7 +41,8 @@ class ExpertPolicy:
         nodes_positions,
         obstacles,
         mission: list[str],
-        agent_name
+        agent_name,
+        base_dir: str = "datasets"
     ):
         # Basics
         self.env = env
@@ -54,6 +55,7 @@ class ExpertPolicy:
         self.actions = []
         self.path = []
         self.agent_name = agent_name
+        self.base_dir = base_dir
 
         # Debugging
         self.waypoints = []
@@ -79,17 +81,31 @@ class ExpertPolicy:
     #     poly = affinity.rotate(poly, obs.yaw, use_radians=True)
     #     return affinity.translate(poly, obs.pos[0], obs.pos[1])
 
-    def _save_episode(self) -> None:
-        """Persist collected observations and actions."""
+    def _save_episode(self, mark_end: bool = True) -> int:
+        """Persist collected observations and actions.
+
+        Returns the number of frames saved.
+        """
         if not self.obs:
-            return
+            return 0
+
+        flags = [0] * len(self.actions)
+        if mark_end and flags:
+            flags[-1] = 1
+
         save_data_batch(
             self.obs,
             self.actions,
-            "/Users/julianquast/Documents/Bachelor Thesis/Datasets",
+            self.base_dir,
+            flags,
         )
 
-    def solve_mission(self) -> None:
+        n = len(self.obs)
+        self.obs = []
+        self.actions = []
+        return n
+
+    def solve_mission(self) -> int:
         """
         Execute self.mission, which should be a list of (action, target) tuples.
         - action: one of "go_to", "pick_up", "put_down"/"drop", "toggle"
@@ -110,7 +126,7 @@ class ExpertPolicy:
                 raise ValueError(f"[solve_mission] unknown action '{action}'")
 
         # finally, dump the collected observations & actions
-        self._save_episode()
+        return self._save_episode()
     
    
 
