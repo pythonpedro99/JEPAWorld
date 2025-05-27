@@ -583,10 +583,11 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         portal_wall = attach_walls.get("bathroom", None)
 
         # 2) choose a free wall
-        free_walls = [w for w in range(room.num_walls) if w != portal_wall]
-        if not free_walls:
+        excluded = {portal_wall, (portal_wall + 2) % room.num_walls}
+        candidate_walls = [w for w in range(room.num_walls) if w not in excluded]
+        if not candidate_walls:
             return
-        wall = self.rng.choice(free_walls)
+        wall = self.rng.choice(candidate_walls)
 
         # 3) compute coordinates for that wall
         x0, x1 = room.min_x, room.max_x
