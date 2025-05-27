@@ -38,7 +38,7 @@ class DatasetGenerator:
         self.graph: nx.Graph | None = None
         self.node_positions: Dict[str, Tuple[float, float]] | None = None
         self.nodes: List[str] | None = None
-        #self.agent_node: str | None = None
+        self.agent_node: str | None = None
 
         self._new_env()
 
@@ -59,7 +59,7 @@ class DatasetGenerator:
             min_samples=0,
             min_dist=0.1,
         )
-        #self.agent_node = next(n for n in self.nodes if n.startswith("agent"))
+        self.agent_node = next(n for n in self.nodes if n.startswith("agent"))
 
     # ------------------------------------------------------------------
     # Mission helpers
@@ -319,10 +319,15 @@ class DatasetGenerator:
             dataset_dir=self.output_dir,
         )
 
+        attempts = 0
         success = policy.go_to(pick)
-        if not success:
+        while not success and attempts < 3:
             policy.obs = []
             policy.actions = []
+            pick, drop_target = self._select_random_movable()
+            success = policy.go_to(pick)
+            attempts += 1
+        if not success:
             return False
 
         success = policy.pick_up()
