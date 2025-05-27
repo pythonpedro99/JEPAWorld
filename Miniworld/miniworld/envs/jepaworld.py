@@ -157,6 +157,8 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         super().__init__(max_episode_steps=500, **kwargs)
         utils.EzPickle.__init__(self, seed=seed, **kwargs)
         self.action_space = spaces.Discrete(self.actions.move_forward + 1)
+        self.named_rooms = {}
+        self.room_name_to_id = {}
         
 
     def _random_dim(self, size_range):
@@ -705,77 +707,117 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
             dir=bed_dir
     )
         
-    def _place_random_movables(self, rooms, n, parent=None):
-        """
-        Pick n distinct movables, then for each:
-        • choose a random ordering of rooms (or use the provided rooms dict)
-        • sample up to max_tries random (x,z) positions inside its bounds
-        • test each candidate against all existing entities for overlap
-        • place it (static=False) as soon as you find a free spot in any room
-        • attach to `parent` if provided
-        • if none of the chosen movables can be placed in any room, warn once at the end
-        """
-        cfg       = self.FURNITURE.get("living_room", {})
-        movables  = cfg.get("movables", [])
-        n         = min(n, len(movables))
-        chosen    = self.rng.sample(movables, n)
-        print(f"Placing {n} random movables: {chosen}")
-        margin    = 0.5
-        max_tries = 30
+    # def _place_random_movables(self, rooms, n, parent=None):
+    #     """
+    #     Pick ``n`` distinct movables and place each of them in a random room.
+    #     Kept for backward compatibility but not used in the fixed mission setup.
+    #     """
+    #     cfg = self.FURNITURE.get("living_room", {})
+    #     movables = cfg.get("movables", [])
+    #     n = min(n, len(movables))
+    #     chosen = self.rng.sample(movables, n)
+    #     margin = 0.5
+    #     max_tries = 30
 
-        def spot_is_free(x, z, r):
-            for ent in self.entities:
-                ex, _, ez = ent.pos
-                if (x - ex)**2 + (z - ez)**2 < (r + ent.radius)**2:
-                    return False
-            return True
+    #     def spot_is_free(x, z, r):
+    #         for ent in self.entities:
+    #             ex, _, ez = ent.pos
+    #             if (x - ex)**2 + (z - ez)**2 < (r + ent.radius)**2:
+    #                 return False
+    #         return True
 
-        placed_any = False
+    #     placed_any = False
 
-        for mesh_name in chosen:
-            ent    = MeshEnt(
-                mesh_name=mesh_name,
-                height=self.SCALE_FACTORS.get(mesh_name, 1.0),
-                static=False
-            )
-            radius = ent.radius
+    #     for mesh_name in chosen:
+    #         ent    = MeshEnt(
+    #             mesh_name=mesh_name,
+    #             height=self.SCALE_FACTORS.get(mesh_name, 1.0),
+    #             static=False
+    #         )
+    #         radius = ent.radius
 
-            # shuffle rooms to try placement in random order
-            room_items = list(rooms.items())
-            self.rng.shuffle(room_items)
-            placed = False
+    #         # shuffle rooms to try placement in random order
+    #         room_items = list(rooms.items())
+    #         self.rng.shuffle(room_items)
+    #         placed = False
 
-            for room_name, room in room_items:
-                # compute bounds with margin
-                x_min = room.min_x + margin
-                x_max = room.max_x - margin
-                z_min = room.min_z + margin
-                z_max = room.max_z - margin
+    #         for room_name, room in room_items:
+    #             # compute bounds with margin
+    #             x_min = room.min_x + margin
+    #             x_max = room.max_x - margin
+    #             z_min = room.min_z + margin
+    #             z_max = room.max_z - margin
 
-                # attempt random samples in this room
-                for _ in range(max_tries):
-                    x = self.rng.uniform(x_min, x_max)
-                    z = self.rng.uniform(z_min, z_max)
-                    if not spot_is_free(x, z, radius):
-                        continue
-                    dir_movable = self.rng.uniform(0, 2 * math.pi)
-                    # place entity and attach to parent if given
-                    self.place_entity(
-                        ent,
-                        room=room,
-                        pos=(x, 0.0, z),
-                        dir=dir_movable
-                    )
-                    placed = True
-                    placed_any = True
-                    break
+    #             # attempt random samples in this room
+    #             for _ in range(max_tries):
+    #                 x = self.rng.uniform(x_min, x_max)
+    #                 z = self.rng.uniform(z_min, z_max)
+    #                 if not spot_is_free(x, z, radius):
+    #                     continue
+    #                 dir_movable = self.rng.uniform(0, 2 * math.pi)
+    #                 # place entity and attach to parent if given
+    #                 self.place_entity(
+    #                     ent,
+    #                     room=room,
+    #                     pos=(x, 0.0, z),
+    #                     dir=dir_movable
+    #                 )
+    #                 placed = True
+    #                 placed_any = True
+    #                 break
 
-                if placed:
-                    break
+    #             if placed:
+    #                 break
 
-        # final warning if no movable placed in any room
-        if not placed_any:
-            print(f"Warning: could not place any of the chosen movables in any free spot of provided rooms")
+    #     # final warning if no movable placed in any room
+    #     if not placed_any:
+    #         print(
+    #             "Warning: could not place any of the chosen movables in any free spot of provided rooms"
+    #         )
+
+    # def _place_specified_movables(self, rooms: dict[str, "Room"], placement: dict[str, str]) -> None:
+    #     """Place specific movables in the given rooms at random locations."""
+    #     margin = 0.5
+    #     max_tries = 30
+
+    #     def spot_is_free(x: float, z: float, r: float) -> bool:
+    #         for ent in self.entities:
+    #             ex, _, ez = ent.pos
+    #             if (x - ex) ** 2 + (z - ez) ** 2 < (r + ent.radius) ** 2:
+    #                 return False
+    #         return True
+
+    #     for mesh_name, room_name in placement.items():
+    #         room = rooms.get(room_name)
+    #         if room is None:
+    #             print(f"[place_specified_movables] unknown room '{room_name}' for '{mesh_name}'")
+    #             continue
+
+    #         ent = MeshEnt(
+    #             mesh_name=mesh_name,
+    #             height=self.SCALE_FACTORS.get(mesh_name, 1.0),
+    #             static=False,
+    #         )
+    #         radius = ent.radius
+
+    #         x_min = room.min_x + margin
+    #         x_max = room.max_x - margin
+    #         z_min = room.min_z + margin
+    #         z_max = room.max_z - margin
+
+    #         placed = False
+    #         for _ in range(max_tries):
+    #             x = self.rng.uniform(x_min, x_max)
+    #             z = self.rng.uniform(z_min, z_max)
+    #             if not spot_is_free(x, z, radius):
+    #                 continue
+    #             dir_movable = self.rng.uniform(0, 2 * math.pi)
+    #             self.place_entity(ent, room=room, pos=(x, 0.0, z), dir=dir_movable)
+    #             placed = True
+    #             break
+
+    #         if not placed:
+    #             print(f"[place_specified_movables] failed to place '{mesh_name}' in '{room_name}'")
 
 
     def create_flat(self):
@@ -814,8 +856,20 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         self._furnish_kitchen(rooms, attach_walls)
         self._furnish_bathroom(rooms, attach_walls)
         self._furnish_bedroom(rooms, attach_walls)
-        self._place_random_movables(rooms, n=1)
 
+        # # Place specified movable objects for fixed missions
+        # placement = {
+        #     "towl_01/towl_01": "bedroom",
+        #     "duckie": "living_room",
+        #     "keys_01/keys_01": "living_room",
+        #     "chips_01/chips_01": "kitchen",
+        #     "dish_01/dish_01": "living_room",
+        # }
+        # self._place_specified_movables(rooms, placement)
+
+        # store mapping of room names to ids for external use
+        self.named_rooms = rooms
+        self.room_name_to_id = {name: self.rooms.index(r) for name, r in rooms.items()}
 
         return rooms, room_positions
 
