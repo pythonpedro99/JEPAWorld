@@ -27,7 +27,7 @@ class CollectTrajectories:
         self.env.reset()
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=2.5, k_neighbors=8, jitter_ratio=0.0, min_samples=0, min_dist=0.2
+            sample_density=3.0, k_neighbors=9, jitter_ratio=0.0, min_samples=0, min_dist=0.1
         )
         agent_node = next(
          (n for n in self.nodes if n.startswith("agent")),
@@ -176,7 +176,7 @@ class CollectTrajectories:
         room_polygons = {r.id: Polygon(r.vertices) for r in self.graph_data.rooms}
 
         # Build obstacle buffers (inflated by agent radius)
-        agent_radius = 0.4
+        agent_radius = 0.25
         obstacle_buffers: Dict[str, Polygon] = {}
         for obs in self.graph_data.obstacles:
             w, d = obs.size

@@ -72,13 +72,6 @@ class ExpertPolicy:
         self.waypoint_tolerance = 0.2  # tolerance for reaching waypoints
         self.lookahead_distance = 0.5  # distance to look ahead for the next waypoint
 
-    # def _obstacle_polygon(self, obs) -> Polygon:
-    #     """Return shapely polygon of the obstacle."""
-    #     w, d = obs.size
-    #     poly = box(-w / 2, -d / 2, w / 2, d / 2)
-    #     poly = affinity.rotate(poly, obs.yaw, use_radians=True)
-    #     return affinity.translate(poly, obs.pos[0], obs.pos[1])
-
     def _save_episode(self) -> None:
         """Persist collected observations and actions."""
         if not self.obs:
@@ -100,6 +93,7 @@ class ExpertPolicy:
             if action == "go_to":
                 # target can be a node‐name or a raw (x,y) coordinate
                 self.go_to(target)
+                #self.env.place_agent(pos=(1.,0.0,1.0), dir=0.0)
             elif action == "pick_up":
                 self.pick_up()
             elif action in ("drop"):

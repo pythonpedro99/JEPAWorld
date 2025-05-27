@@ -128,12 +128,12 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
     "sideboard_01/sideboard_01":       1.0,
     "sideboard_02/sideboard_02":       1.0,
     "table_01/table_01":               0.5,
-    "tv_01/tv_01":                     1.0,
-    "duckie":                          0.2,
-    "chips_01/chips_01":               0.2,
-    "handy_01/handy_01":               0.5,
-    "keys_01/keys_01":                 0.1,
-    "dish_01/dish_01":                 0.06,
+    "tv_01/tv_01":                     0.7,
+    "duckie":                          0.1,
+    "chips_01/chips_01":               0.1,
+    "handy_01/handy_01":               0.3,
+    "keys_01/keys_01":                 0.09,
+    "dish_01/dish_01":                 0.05,
     "towl_01/towl_01":                 0.01,
 
     # kitchen
