@@ -27,7 +27,7 @@ class CollectTrajectories:
         self.env.reset()
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=1.5, k_neighbors=7, jitter_ratio=0.0, min_samples=0, min_dist=0.5
+            sample_density=1.5, k_neighbors=8, jitter_ratio=0.0, min_samples=0, min_dist=0.5
         )
         agent_node = next(
          (n for n in self.nodes if n.startswith("agent")),
@@ -38,18 +38,29 @@ class CollectTrajectories:
         self.agent = agent_node
         self.mission = self._select_random_movable()
         print("Mission:", self.mission)
-
-        #expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
-        #expert_policy.solve_mission()
+        try:
+          expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
+          expert_policy.solve_mission()
   
-        plot_prm_graph(
+          plot_prm_graph(
             self.graph_data,
             self.graph,
             self.node_positions,
             self.nodes,
-            #highlight_path= expert_policy.path,
-            #smoothed_curve= expert_policy.smoothed_waypoints
-        )
+            highlight_path= expert_policy.path,
+            smoothed_curve= expert_policy.smoothed_waypoints
+           )
+        except Exception as e:
+            print(f"An error occurred while solving the mission: {e}")
+            plot_prm_graph(
+            self.graph_data,
+            self.graph,
+            self.node_positions,
+            self.nodes
+           )
+            return
+        
+        print("Mission completed successfully!")
 
     # Functions
 
@@ -60,7 +71,6 @@ class CollectTrajectories:
             "chips",
             "handy",
             "keys",
-            "dish",
             "towl",
         ]
 
