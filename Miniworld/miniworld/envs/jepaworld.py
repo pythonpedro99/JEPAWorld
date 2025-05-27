@@ -716,7 +716,6 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
         movables  = cfg.get("movables", [])
         n         = min(n, len(movables))
         chosen    = self.rng.sample(movables, n)
-        print(chosen)
         margin    = 0.5
         max_tries = 20
 

@@ -27,7 +27,7 @@ class CollectTrajectories:
         self.env.reset()
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=1.5, k_neighbors=8, jitter_ratio=0.0, min_samples=0, min_dist=0.5
+            sample_density=1.5, k_neighbors=6, jitter_ratio=0.0, min_samples=0, min_dist=0.5
         )
         agent_node = next(
          (n for n in self.nodes if n.startswith("agent")),
@@ -39,16 +39,16 @@ class CollectTrajectories:
         self.mission = self._select_random_movable()
         print("Mission:", self.mission)
 
-        expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
-        expert_policy.solve_mission()
+        #expert_policy = ExpertPolicy( self.env, self.graph, self.nodes, self.node_positions, self.graph_data.obstacles,self.mission,self.agent)
+        #expert_policy.solve_mission()
   
         plot_prm_graph(
             self.graph_data,
             self.graph,
             self.node_positions,
             self.nodes,
-            highlight_path= expert_policy.path,
-            smoothed_curve= expert_policy.smoothed_waypoints
+            #highlight_path= expert_policy.path,
+            #smoothed_curve= expert_policy.smoothed_waypoints
         )
 
     # Functions
@@ -304,6 +304,9 @@ class CollectTrajectories:
                         n1, n2 = group[i], group[j]
                         p1 = np.array(node_positions[n1])
                         p2 = np.array(node_positions[n2])
+                        seg = LineString([p1, p2])
+                        if any(buf.intersects(seg) for buf in obstacle_buffers.values()):
+                            continue
                         dist = float(np.linalg.norm(p1 - p2))
                         graph.add_edge(n1, n2, weight=dist)
         # group by rounded Y
@@ -318,6 +321,9 @@ class CollectTrajectories:
                         n1, n2 = group[i], group[j]
                         p1 = np.array(node_positions[n1])
                         p2 = np.array(node_positions[n2])
+                        seg = LineString([p1, p2])
+                        if any(buf.intersects(seg) for buf in obstacle_buffers.values()):
+                            continue
                         dist = float(np.linalg.norm(p1 - p2))
                         graph.add_edge(n1, n2, weight=dist)
         

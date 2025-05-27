@@ -95,14 +95,11 @@ def find_path(
         if node_positions is None:
             raise ValueError("node_positions required when start is coordinates")
         start = closest_node(node_positions, tuple(start))
-        print(f"start {start}")
-    print(f"Finding path from {start} to {goal} in graph with nodes {nodes}")
 
     if not graph.has_node(start) or not graph.has_node(goal):
         return None
 
     to_remove = set(nodes) - {start, goal}
-    print(f"Removing nodes: {to_remove}")
     G = graph.copy()
     G.remove_nodes_from(to_remove)
     if not G.has_node(start) or not G.has_node(goal):
