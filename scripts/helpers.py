@@ -143,9 +143,9 @@ def save_data_batch(
     Returns:
         A tuple of (list_of_image_paths, action_csv_path).
     """
-    if len(obs_list) != len(action_list):
-        raise ValueError(f"Expected same length for obs_list and action_list, "
-                         f"got {len(obs_list)} vs {len(action_list)}")
+    # if len(obs_list) != len(action_list):
+    #     raise ValueError(f"Expected same length for obs_list and action_list, "
+    #                      f"got {len(obs_list)} vs {len(action_list)}")
 
     base = Path(base_dir)
     img_dir = base / "images"
