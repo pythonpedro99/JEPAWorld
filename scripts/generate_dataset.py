@@ -42,6 +42,13 @@ class DatasetGenerator:
         self.nodes: List[str] | None = None
         self.agent_node: str | None = None
         self.current_movable = None
+        self.mission_defs = [
+            ("towl_01/towl_01", "bedroom", ("obstacle", "washer")),
+            ("duckie", "living_room", ("room", "children_room")),
+            ("keys_01/keys_01", "living_room", ("room", "hallway")),
+            ("chips_01/chips_01", "kitchen", ("room", "living_room")),
+            ("dish_01/dish_01", "living_room", ("obstacle", "sink_01")),
+        ]
 
         self._new_env()
 
@@ -73,16 +80,7 @@ class DatasetGenerator:
     # Mission helpers
     # ------------------------------------------------------------------
     
-    def _create_random_movable(self) -> None:
-        movables = self.env.unwrapped.FURNITURE["living_room"].get("movables", [])
-        if not movables:
-            return
-        mesh = random.choice(movables)
-        height = self.env.unwrapped.SCALE_FACTORS.get(mesh, 0.1)
-        ent = MeshEnt(mesh_name=mesh, height=height, static=False)
-        room = random.choice(self.env.unwrapped.rooms)
-        self.env.unwrapped.place_entity(ent, room=room)
-        self.current_movable = ent
+
 
     def _remove_current_movable(self) -> None:
         if self.current_movable is None:
@@ -92,30 +90,43 @@ class DatasetGenerator:
         if self.current_movable in self.env.unwrapped.entities:
             self.env.unwrapped.entities.remove(self.current_movable)
         self.current_movable = None
-    
-    
-    
-    def _select_random_movable(self) -> Tuple[str, str]:
-        movables = ["duckie", "chips", "handy", "keys", "towl","dish"]
 
-        candidates = [
-            node for node in self.nodes if any(node.startswith(m) for m in movables)
-        ]
-        if not candidates:
-            raise ValueError("No movable objects found in nodes")
+    def _select_mission(self) -> Tuple[str, str]:
+        """Set up and return a mission based on predefined definitions."""
+        mesh, room_name, dest = random.choice(self.mission_defs)
+        # Place the movable in the specified room
+        height = self.env.unwrapped.SCALE_FACTORS.get(mesh, 0.1)
+        ent = MeshEnt(mesh_name=mesh, height=height, static=False)
+        room = self.env.unwrapped.named_rooms.get(room_name)
+        if room is None:
+            raise ValueError(f"Unknown room '{room_name}' in mission definition")
+        self.env.unwrapped.place_entity(ent, room=room)
+        self.current_movable = ent
+        # Rebuild the graph now that the movable is placed
+        self._update_graph()
 
-        target_movable = random.choice(candidates)
+        # Determine pick-up node for the placed movable
+        prefix = mesh.split("/")[0]
+        movable_candidates = [n for n in self.nodes if n.startswith(prefix)]
+        if not movable_candidates:
+            raise ValueError(f"No node found for movable '{mesh}'")
+        pick_node = movable_candidates[0]
 
-        drop_candidates = [
-            n
-            for n in self.node_positions.keys()
-            if n not in {target_movable, self.agent_node}
-        ]
+        # Determine drop target
+        dest_type, dest_name = dest
+        if dest_type == "room":
+            rid = self.env.unwrapped.room_name_to_id.get(dest_name)
+            if rid is None:
+                raise ValueError(f"Unknown room '{dest_name}' in mission definition")
+            drop_candidates = [n for n in self.node_positions if n.startswith(f"r{rid}_s")]
+        else:
+            drop_candidates = [n for n in self.node_positions if n.startswith(dest_name)]
+
         if not drop_candidates:
-            raise ValueError("No valid drop location found in nodes")
-        drop_target = random.choice(drop_candidates)
+            raise ValueError("No valid drop location found for mission")
+        drop_node = random.choice(drop_candidates)
 
-        return target_movable, drop_target
+        return pick_node, drop_node
 
     def _random_drop_target(self, exclude: Sequence[str]) -> str:
         candidates = [n for n in self.node_positions if n not in set(exclude)]
@@ -338,10 +349,7 @@ class DatasetGenerator:
 
     # ------------------------------------------------------------------
     def _run_mission(self) -> bool:
-        
-        self._create_random_movable()
-        self._update_graph()
-        pick, drop_target = self._select_random_movable()
+        pick, drop_target = self._select_mission()
 
         policy = ExpertPolicy(
             self.env,
@@ -358,7 +366,7 @@ class DatasetGenerator:
         while not success and attempts < 3:
             policy.obs = []
             policy.actions = []
-            pick, drop_target = self._select_random_movable()
+            pick, drop_target = self._select_mission()
             success = policy.go_to(pick)
             attempts += 1
         if not success:
