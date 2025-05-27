@@ -27,7 +27,7 @@ class CollectTrajectories:
         self.env.reset()
         self.graph_data = self.get_graph_data()
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=1.5, k_neighbors=8, jitter_ratio=0.0, min_samples=0, min_dist=0.5
+            sample_density=2.5, k_neighbors=8, jitter_ratio=0.0, min_samples=0, min_dist=0.2
         )
         agent_node = next(
          (n for n in self.nodes if n.startswith("agent")),
