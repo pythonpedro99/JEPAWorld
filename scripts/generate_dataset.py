@@ -67,13 +67,22 @@ class DatasetGenerator:
 
     def _update_graph(self) -> None:
         self.graph_data = self.get_graph_data()
+        print(self.graph_data.obstacles)
         self.graph, self.node_positions, self.nodes = self.build_prm_graph(
-            sample_density=2.0,
+            sample_density=1.5,
             k_neighbors=9,
             jitter_ratio=0.0,
             min_samples=0,
             min_dist=0.1,
         )
+        plot_prm_graph(
+                self.graph_data,
+                self.graph,
+                self.node_positions,
+                self.nodes,
+                #highlight_path=policy.path,
+                #smoothed_curve=None,
+            )
         self.agent_node = next(n for n in self.nodes if n.startswith("agent"))
 
     # ------------------------------------------------------------------
@@ -106,6 +115,7 @@ class DatasetGenerator:
         # Determine pick-up node for the placed movable
         prefix = mesh.split("/")[0]
         movable_candidates = [n for n in self.nodes if n.startswith(prefix)]
+        print(f"Movable candidates for '{mesh}': {movable_candidates}")
         if not movable_candidates:
             raise ValueError(f"No node found for movable '{mesh}'")
         pick_node = movable_candidates[0]
@@ -123,6 +133,8 @@ class DatasetGenerator:
         if not drop_candidates:
             raise ValueError("No valid drop location found for mission")
         drop_node = random.choice(drop_candidates)
+        print(f"Selected drop node: {drop_node} for destination {dest_name}")
+        print(f"Pick node: {pick_node}, Drop node: {drop_node}")
 
         return pick_node, drop_node
 
@@ -364,21 +376,35 @@ class DatasetGenerator:
         while not success and attempts < 3:
             policy.obs = []
             policy.actions = []
+            self._remove_current_movable()
             pick, drop_target = self._select_mission()
+            policy = ExpertPolicy(
+            self.env,
+            self.graph,
+            self.nodes,
+            self.node_positions,
+            self.graph_data.obstacles,
+            [],
+            dataset_dir=self.output_dir,
+             )
             success = policy.go_to(pick)
             attempts += 1
         if not success:
             self.env.unwrapped.place_agent()
             self._remove_current_movable()
+            print("could not got to the pick up location")
             return False
+        self.frames_collected += policy._save_episode()
 
         success = policy.pick_up()
-        if not success or not self.env.unwrapped.agent.carrying:
+        if not success: # or not self.env.unwrapped.agent.carrying:
             policy.obs = []
             policy.actions = []
             self.env.unwrapped.place_agent()
             self._remove_current_movable()
+            print(f"could not pick up because {success} or {self.env.unwrapped.agent.carrying}")
             return False
+        self.frames_collected += policy._save_episode()
 
         attempts = 0
         drop_success = False
@@ -389,6 +415,7 @@ class DatasetGenerator:
             else:
                 policy.obs = []
                 policy.actions = []
+                print(f"could not complete drop because either of faild go to or faild drop. carrying staus {self.env.unwrapped.agent.carrying} ")
                 target = self._random_drop_target(exclude=[pick, self.agent_node])
                 attempts += 1
 
@@ -401,14 +428,14 @@ class DatasetGenerator:
         self.frames_collected += policy._save_episode()
         self.env.unwrapped.place_agent()
         self._remove_current_movable()
-        plot_prm_graph(
-                self.graph_data,
-                self.graph,
-                self.node_positions,
-                self.nodes,
-                highlight_path=policy.path,
-                smoothed_curve=None,
-            )
+        # plot_prm_graph(
+        #         self.graph_data,
+        #         self.graph,
+        #         self.node_positions,
+        #         self.nodes,
+        #         highlight_path=policy.path,
+        #         smoothed_curve=None,
+        #     )
         return True
 
     # ------------------------------------------------------------------

@@ -46,10 +46,10 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
     ROOM_SIZE_RANGES = {
         "living_room": ((4.66, 5.49), (7.71, 9.53)),
         "kitchen": ((4.52, 5.04), (4.65, 6.09)),
-        "bedroom": ((4.04, 3.04), (4.27, 5.49)),
+        "bedroom": ((5.04, 6.04), (4.27, 7.49)),
         "children_room": ((4.05, 4.05), (4.05, 4.57)),
         "bathroom": ((4.90, 4.50), (4.00, 4.70)),
-        "hallway": ((1.00, 4.60), (1.20, 6.10)),
+        "hallway": ((1.00, 6.60), (1.20, 7.10)),
     }
 
     FURNITURE = {
@@ -134,7 +134,7 @@ class JEPAWorld(MiniWorldEnv, utils.EzPickle):
     "handy_01/handy_01":               0.3,
     "keys_01/keys_01":                 0.09,
     "dish_01/dish_01":                 0.05,
-    "towl_01/towl_01":                 0.01,
+    "towl_01/towl_01":                 0.06,
 
     # kitchen
     "kitchen_01/kitchen_01":    1.0,

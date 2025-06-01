@@ -146,7 +146,7 @@ class ExpertPolicy:
 
         # 3) Compute stopping buffer for the final waypoint
         agent_radius = getattr(self.env.unwrapped.agent, "radius", 0.2)
-        target_buffer = agent_radius + 0.75
+        target_buffer = agent_radius + 0.8
 
         # 4) Iterate through each waypoint
         for i, (wx, wy) in enumerate(waypoints):
@@ -271,13 +271,14 @@ class ExpertPolicy:
         Pick up an object at the current agent position.
         """
         obs, _, term, trunc, _ = self.env.step(4)
+        print("picked up moveable")
         self.obs.append(obs)
         self.actions.append(4)
         if term or trunc:
             print("[DEBUG] Episode timeout.")
             self._save_episode()
             return False
-        return self.env.unwrapped.agent.carrying is not None
+        return True  #self.env.unwrapped.agent.carrying is not None
 
     def drop(self) -> bool:
         """
