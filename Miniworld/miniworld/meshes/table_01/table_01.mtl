@@ -1,6 +1,0 @@
-# 3ds Max Wavefront OBJ Exporter v0.94b - (c)2007 guruware
-# File Created: 08.05.2019 09:30:36
-
-newmtl table_01
-Kd 0.9922 0.9804 0.8941
-map_Kd table_01.jpg

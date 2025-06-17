@@ -75,14 +75,14 @@ class DatasetGenerator:
             min_samples=0,
             min_dist=0.1,
         )
-        plot_prm_graph(
-                self.graph_data,
-                self.graph,
-                self.node_positions,
-                self.nodes,
-                #highlight_path=policy.path,
-                #smoothed_curve=None,
-            )
+        # plot_prm_graph(
+        #         self.graph_data,
+        #         self.graph,
+        #         self.node_positions,
+        #         self.nodes,
+        #         #highlight_path=policy.path,
+        #         #smoothed_curve=None,
+        #     )
         self.agent_node = next(n for n in self.nodes if n.startswith("agent"))
 
     # ------------------------------------------------------------------
@@ -359,84 +359,60 @@ class DatasetGenerator:
 
     # ------------------------------------------------------------------
     def _run_mission(self) -> bool:
-        pick, drop_target = self._select_mission()
+        successful_missions = 0
 
-        policy = ExpertPolicy(
-            self.env,
-            self.graph,
-            self.nodes,
-            self.node_positions,
-            self.graph_data.obstacles,
-            [],
-            dataset_dir=self.output_dir,
-        )
-
-        attempts = 0
-        success = policy.go_to(pick)
-        while not success and attempts < 3:
-            policy.obs = []
-            policy.actions = []
-            self._remove_current_movable()
+        while successful_missions < 2:
+            # Select a new mission
             pick, drop_target = self._select_mission()
+
+            # Create a fresh policy for this mission
             policy = ExpertPolicy(
-            self.env,
-            self.graph,
-            self.nodes,
-            self.node_positions,
-            self.graph_data.obstacles,
-            [],
-            dataset_dir=self.output_dir,
-             )
-            success = policy.go_to(pick)
-            attempts += 1
-        if not success:
+                self.env,
+                self.graph,
+                self.nodes,
+                self.node_positions,
+                self.graph_data.obstacles,
+                [],
+                dataset_dir=self.output_dir,
+            )
+
+            # Attempt to navigate to the pick-up location once
+            if not policy.go_to(pick):
+                print("Could not get to the pick-up location. Skipping this mission.")
+                continue
+
+            
+
+            # Attempt the pick-up once
+            if not policy.pick_up():
+                print(f"Could not pick up (carrying: {self.env.unwrapped.agent.carrying}). Skipping this mission.")
+                continue
+
+            # Attempt to navigate to the drop-off location once and drop
+            if not (policy.go_to(drop_target) and policy.drop() and not self.env.unwrapped.agent.carrying):
+                print("Could not complete drop. Skipping this mission.")
+                continue
+
+            # Append a terminal action, save frames, and reset environment
+            policy.actions.append(-1)
+            self.frames_collected += policy._save_episode()
             self.env.unwrapped.place_agent()
             self._remove_current_movable()
-            print("could not got to the pick up location")
-            return False
-        self.frames_collected += policy._save_episode()
 
-        success = policy.pick_up()
-        if not success: # or not self.env.unwrapped.agent.carrying:
-            policy.obs = []
-            policy.actions = []
-            self.env.unwrapped.place_agent()
-            self._remove_current_movable()
-            print(f"could not pick up because {success} or {self.env.unwrapped.agent.carrying}")
-            return False
-        self.frames_collected += policy._save_episode()
+            # Optionally visualize the path for this successful mission
+            plot_prm_graph(
+                self.graph_data,
+                self.graph,
+                self.node_positions,
+                self.nodes,
+                highlight_path=policy.path,
+                smoothed_curve=None,
+            )
 
-        attempts = 0
-        drop_success = False
-        target = drop_target
-        while attempts < 3 and not drop_success:
-            if policy.go_to(target) and policy.drop() and not self.env.unwrapped.agent.carrying:
-                drop_success = True
-            else:
-                policy.obs = []
-                policy.actions = []
-                print(f"could not complete drop because either of faild go to or faild drop. carrying staus {self.env.unwrapped.agent.carrying} ")
-                target = self._random_drop_target(exclude=[pick, self.agent_node])
-                attempts += 1
+            successful_missions += 1
 
-        if not drop_success:
-            self.env.unwrapped.place_agent()
-            self._remove_current_movable()
-            return False
-
-        policy.actions.append(-1)
-        self.frames_collected += policy._save_episode()
-        self.env.unwrapped.place_agent()
-        self._remove_current_movable()
-        # plot_prm_graph(
-        #         self.graph_data,
-        #         self.graph,
-        #         self.node_positions,
-        #         self.nodes,
-        #         highlight_path=policy.path,
-        #         smoothed_curve=None,
-        #     )
         return True
+
 
     # ------------------------------------------------------------------
     def generate(self) -> None:

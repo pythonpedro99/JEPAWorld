@@ -2,16 +2,20 @@ import math
 
 import pyglet
 from pyglet.window import key
-from imageio import imwrite
 from gymnasium.envs.registration import register
 import numpy as np
-import random
+
 register(
-    id="JEPAWorld-v0",
-    entry_point="miniworld.envs.jepaworld:JEPAWorld",
-    max_episode_steps=500,
-    kwargs={"seed":6},   # any default kwargs your ctor needs;  random.randint(0, 2**31 - 1)
+    id="JEPAENV-v0",                      # your chosen Gym ID
+    entry_point="miniworld.envs.jeparoom:JEPAENV",        # module path and class name
+    kwargs={
+        "size": 12,                        # default size (optional)
+        "seed": np.random.randint(0, 2**31 - 1),                        # default seed (optional)
+    },
+    max_episode_steps=500,                 # match your env’s timeframe
 )
+
+
 
 class ManualControl:
     def __init__(self, env, no_time_limit: bool, domain_rand: bool):
@@ -30,8 +34,7 @@ class ManualControl:
         print("============")
 
         self.env.reset()
-        image = self.env.render_top_view()
-        imwrite('top_view.png', image.astype('uint8'))
+
         # Create the display window
         self.env.render()
 

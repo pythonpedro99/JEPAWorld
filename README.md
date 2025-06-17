@@ -3,6 +3,8 @@ deactivate
 pip freeze > ../requirements.txt
 
 
+ python Miniworld/scripts/manual_control.py --env-name JEPAENV-v0
+
 
 (1) Miniworld/scripts/manual_control.py --env-name MiniWorld-PutNext-v0
 (2) Miniworld/scripts/manual_control.py --env-name MiniWorld-FourRooms-v0

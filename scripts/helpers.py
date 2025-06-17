@@ -11,6 +11,9 @@ from shapely import affinity
 from pathlib import Path
 from typing import Union, Tuple
 from datetime import datetime
+import matplotlib.pyplot as plt
+from shapely.geometry import Polygon
+from matplotlib.patches import Polygon as MplPolygon, Rectangle
 
 import numpy as np
 from PIL import Image

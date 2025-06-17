@@ -146,7 +146,7 @@ class ExpertPolicy:
 
         # 3) Compute stopping buffer for the final waypoint
         agent_radius = getattr(self.env.unwrapped.agent, "radius", 0.2)
-        target_buffer = agent_radius + 0.8
+        target_buffer = agent_radius + 0.5
 
         # 4) Iterate through each waypoint
         for i, (wx, wy) in enumerate(waypoints):
