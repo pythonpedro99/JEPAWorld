@@ -59,7 +59,6 @@ class GraphData:
     """
 
     rooms: List[Room]
-    agent: Agent
     obstacles: List[Obstacle]
 
 
@@ -142,3 +141,35 @@ def get_lookahead_point(path_pts, pos, L):
             return nxt
         last = nxt
     return path_pts[-1]
+
+
+
+def perform_full_scan(self, yaw_tol_deg: float = 10.0):
+        """
+        Ordered scan: rotate to face each obstacle once by sorting them by bearing.
+        Uses turn_towards on each obstacle node.
+        """
+        agent = self.env.unwrapped.agent
+        # gather obstacle nodes (exclude samples, agent, text frames)
+        obstacle_nodes = [
+            nid
+            for nid in self.node_pos2d
+            if not any(
+                str(nid).startswith(pref) for pref in ("Agent", "TextFrame", "s")
+            )
+        ]
+        # compute bearing for each obstacle
+        angles = []
+        for nid in obstacle_nodes:
+            x, z = self.node_pos2d[nid]
+            dx = x - agent.pos[0]
+            dz = z - agent.pos[2]
+            bearing = math.atan2(-dz, dx)
+            angles.append((bearing, nid))
+        # sort by bearing
+        angles.sort(key=lambda x: x[0])
+        # rotate to face each in order
+       
+        for _, nid in angles:
+            target_pos = self.node_pos2d[nid]
+            self.turn_towards(target_pos, yaw_tol_deg)

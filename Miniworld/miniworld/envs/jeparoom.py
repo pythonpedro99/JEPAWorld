@@ -60,7 +60,35 @@ class JEPAENV(MiniWorldEnv, utils.EzPickle):
         )
 
         # Place the agent inside the room
-        self.place_agent()
+        offset = 0.5
+        min_x, max_x = 0.0, self.size
+        min_z, max_z = 0.0, self.size
+        corners = [
+            (min_x + offset, min_z + offset),
+            (min_x + offset, max_z - offset),
+            (max_x - offset, min_z + offset),
+            (max_x - offset, max_z - offset),
+        ]
+
+        # pick one at random
+        cx, cz = self.rng.choice(corners)
+
+        # compute yaw so the agent faces the room center
+        center_x = (min_x + max_x) / 2
+        center_z = (min_z + max_z) / 2
+        dx = center_x - cx
+        dz = center_z - cz
+        yaw = math.atan2(-dz, dx)
+
+        # place the agent at (cx, cz), keeping its default height, and set its direction
+        self.place_agent(
+            pos=(cx, 0, cz),
+            dir=yaw,
+            min_x=min_x,
+            max_x=max_x,
+            min_z=min_z,
+            max_z=max_z,
+        )
 
         # Possible entity classes
         entity_classes = [Box, Ball, Key]

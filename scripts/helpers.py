@@ -12,118 +12,247 @@ from pathlib import Path
 from typing import Union, Tuple
 from datetime import datetime
 import matplotlib.pyplot as plt
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, LineString
 from matplotlib.patches import Polygon as MplPolygon, Rectangle
-
+from dataclasses import dataclass
 import numpy as np
 from PIL import Image
+from typing import Optional, Sequence, Union
+from pathlib import Path
+import random
+
+@dataclass
+class Room:
+    id: int
+    vertices: List[Tuple[float, float]]
 
 
-def plot_prm_graph(
-    data,  # GraphData returned by get_graph_data()
-    G: nx.Graph,
-    node_positions: Dict[str, Tuple[float, float]],
-    obstacle_nodes: List[str],
-    highlight_path: Optional[List[str]] = None,
-    smoothed_curve: Optional[List[Tuple[float, float]]] = None
-) -> None:
+@dataclass
+class Agent:
+    pos: Tuple[float, float]
+    yaw: float
+    radius: float
+
+
+@dataclass
+class Obstacle:
+    type: str
+    pos: Tuple[float, float]
+    radius: float
+    node_name: str
+    yaw: float
+    size: Tuple[float, float]
+
+@dataclass
+class GraphData:
     """
-    Plot the PRM roadmap over the environment, using only the three values
-    returned by build_prm_graph plus the original GraphData. Optionally plot
-    a smoothed curve of agent waypoints.
-
-    Args:
-        data:          GraphData (rooms, agent, obstacles).
-        G:             The PRM networkx graph.
-        node_positions: Mapping node_id -> (x, z) coords.
-        obstacle_nodes: List of node_ids corresponding to obstacles.
-        highlight_path: Optional list of node_ids to draw in red.
-        smoothed_curve: Optional list of (x, z) points showing the smoothed path,
-                        or a list of such lists (history).
+    Aggregates rooms, agent, and obstacle data for graph building.
     """
-    fig, ax = plt.subplots(figsize=(8, 8))
 
-    # Reconstruct room polygons
-    room_polys = {r.id: Polygon(r.vertices) for r in data.rooms}
-    for poly in room_polys.values():
-        x, z = poly.exterior.xy
-        ax.add_patch(MplPolygon(
-            list(zip(x, z)),
-            closed=True, facecolor="lightgray", edgecolor="black", alpha=0.5
-        ))
+    room: List[Room]
+    obstacles: List[Obstacle]
 
-    # Reconstruct obstacle buffers as rectangles
-    obstacle_buffers = []
-    for obs in data.obstacles:
-        w, d = obs.size
-        w = max(w, 0.5)
-        d = max(d, 0.5)
-        rect = box(-w / 2, -d / 2, w / 2, d / 2)
-        rect = affinity.rotate(rect, obs.yaw, use_radians=True)
-        rect = affinity.translate(rect, obs.pos[0], obs.pos[1])
-        obstacle_buffers.append(rect)
 
-    for buf in obstacle_buffers:
-        if buf.is_empty:
-            continue
-        x, z = buf.exterior.xy
-        ax.add_patch(
-            MplPolygon(
-                list(zip(x, z)),
-                closed=True,
-                facecolor="red",
-                edgecolor="red",
-                alpha=0.3,
+def get_graph_data(env) -> GraphData:
+    """
+    Converts MiniWorld environment entities into lightweight dataclasses for later use.
+    """
+    unwrapped = env.unwrapped
+
+    # MiniWorld has exactly one room in JEPAENV
+    rm = unwrapped.rooms[0]
+    room_polygon = [(p[0], p[2]) for p in rm.outline]          # (x, z)
+    room = Room(id=0, vertices=room_polygon)
+
+    obstacles: List[Obstacle] = []
+    for idx, ent in enumerate(unwrapped.entities):
+        # orientation
+        yaw = getattr(ent, "dir", 0.0)
+
+        # size handling
+        if hasattr(ent, "size"):
+            sx, _, sz = ent.size
+            width, depth = sx, sz
+        elif hasattr(ent, "mesh") and hasattr(ent.mesh, "min_coords"):
+            width = (ent.mesh.max_coords[0] - ent.mesh.min_coords[0]) * ent.scale
+            depth = (ent.mesh.max_coords[2] - ent.mesh.min_coords[2]) * ent.scale
+        else:  # sphere / cylinder
+            width = depth = getattr(ent, "radius", 0.0) * 2
+
+        obstacles.append(
+            Obstacle(
+                type=ent.__class__.__name__,
+                pos=(ent.pos[0], ent.pos[2]),
+                radius=getattr(ent, "radius", 0.0),
+                node_name=f"{ent.__class__.__name__}_{idx}",
+                yaw=yaw,
+                size=(width, depth),
             )
         )
 
-    # Draw PRM edges
-    for u, v in G.edges():
-        x1, z1 = node_positions[u]
-        x2, z2 = node_positions[v]
-        ax.plot([x1, x2], [z1, z2], color="skyblue", linewidth=0.5, alpha=0.7)
+    return GraphData(room=room, obstacles=obstacles)
 
-    # Draw nodes
-    for nid, (x, z) in node_positions.items():
-        if nid == "agent":
-            ax.scatter(x, z, color="gold", s=100, label="Agent", zorder=5)
-        elif "_p" in nid:
-            ax.scatter(x, z, color="green", s=50, label="Portal", zorder=5)
-        elif nid in obstacle_nodes:
-            ax.scatter(x, z, color="purple", s=80, label="Obstacle", zorder=5)
-        elif "_s" in nid:
-            ax.scatter(x, z, color="blue", s=20, label="Sample", zorder=4)
 
-    # Highlight a path if provided
-    if highlight_path:
-        for u, v in zip(highlight_path, highlight_path[1:]):
-            x1, z1 = node_positions[u]
-            x2, z2 = node_positions[v]
-            ax.plot([x1, x2], [z1, z2], color="red", linewidth=2.5, zorder=6)
+def build_prm_graph_single_room(
+    graph_data: GraphData,
+    sample_density: float = 0.3,
+    k_neighbors: int = 15,
+    jitter_ratio: float = 0.3,
+    min_samples: int = 5,
+    min_dist: float = 0.2,
+    agent_radius: float = 0.2,
+) -> Tuple[nx.Graph, Dict[str, Tuple[float, float]]]:
+    """
+    Builds a probabilistic‑roadmap graph (nodes = obstacles + random samples).
+    """
+    graph = nx.Graph()
+    room_poly = Polygon(graph_data.room.vertices)
 
-    # Plot smoothed curve if provided
-    if smoothed_curve:
-        # Handle nested list-of-curves
-        if isinstance(smoothed_curve[0], list):
-            curve = smoothed_curve[-1]
-        else:
-            curve = smoothed_curve
-        try:
-            sx, sz = zip(*curve)
-            ax.plot(sx, sz, color="orange", linewidth=2.0, label="Smoothed Path", zorder=7)
-        except Exception:
-            pass
+    # Inflate each obstacle by the agent radius so the PRM stays collision‑free
+    inflated: Dict[str, Polygon] = {}
+    for obs in graph_data.obstacles:
+        w, d = max(obs.size[0], 0.5), max(obs.size[1], 0.5)
+        rect = box(
+            -w / 2 - agent_radius,
+            -d / 2 - agent_radius,
+            w / 2 + agent_radius,
+            d / 2 + agent_radius,
+        )
+        rect = affinity.rotate(rect, obs.yaw, use_radians=True)
+        rect = affinity.translate(rect, obs.pos[0], obs.pos[1])
+        inflated[obs.node_name] = rect
 
-    ax.set_aspect("equal", "box")
+    # Node positions dict
+    node_pos: Dict[str, Tuple[float, float]] = {}
+
+    # Add obstacle centres as graph nodes
+    for obs in graph_data.obstacles:
+        node_pos[obs.node_name] = obs.pos
+        graph.add_node(obs.node_name)
+
+    # Random interior samples
+    inner = room_poly.buffer(-min_dist) or room_poly
+    n_samples = max(min_samples, int(room_poly.area * sample_density))
+    grid = max(1, int(np.sqrt(n_samples)))
+    minx, miny, maxx, maxy = inner.bounds
+    dx, dy = (maxx - minx) / grid, (maxy - miny) / grid
+    counter = 0
+
+    for i in range(grid):
+        for j in range(grid):
+            if counter >= n_samples:
+                break
+            cx, cy = minx + (i + 0.5) * dx, miny + (j + 0.5) * dy
+            x = cx + (random.random() - 0.5) * dx * jitter_ratio
+            y = cy + (random.random() - 0.5) * dy * jitter_ratio
+            pt = Point(x, y)
+            if not inner.covers(pt):
+                continue
+            if any(poly.contains(pt) for poly in inflated.values()):
+                continue
+            node_name = f"s{counter}"
+            node_pos[node_name] = (x, y)
+            graph.add_node(node_name)
+            counter += 1
+
+    # k‑nearest connections among all nodes
+    nodes = list(node_pos)
+    for i, n in enumerate(nodes):
+        p_n = np.asarray(node_pos[n])
+        dists = [
+            (m, np.sum((p_n - np.asarray(node_pos[m])) ** 2))
+            for m in nodes
+            if m != n
+        ]
+        dists.sort(key=lambda t: t[1])
+
+        for m, _ in dists[:k_neighbors]:
+            seg = LineString([node_pos[n], node_pos[m]])
+            if not room_poly.covers(seg):
+                continue
+
+            # ✅ Allow edge if it only intersects its own node's inflated obstacle
+            skip = False
+            for obs_name, poly in inflated.items():
+                if obs_name in (n, m):
+                    continue  # allow entry/exit to own center
+                if poly.intersects(seg):
+                    skip = True
+                    break
+            if skip:
+                continue
+
+            graph.add_edge(n, m, weight=seg.length)
+
+    return graph, node_pos
+
+
+def plot_room_with_obstacles_and_path(
+    room_polygon: Polygon,
+    obstacles: List[Obstacle],
+    node_positions: Dict[str, Tuple[float, float]],
+    graph: nx.Graph,
+    path: Optional[List[str]] = None,
+    agent_radius: float = 0.25,
+    title: str = "Room with Obstacles and Path",
+) -> None:
+    """
+    Visualise the room, obstacles, full PRM graph and an optional path.
+    """
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_aspect("equal")
+    ax.set_title(title)
+
+    # --- Room boundary -----------------------------------------------------
+    rx, ry = room_polygon.exterior.xy
+    ax.plot(rx, ry, color="black", linewidth=2, label="Room")
+
+    # --- Obstacles (inflated by agent radius) ------------------------------
+    for obs in obstacles:
+        w, d = max(obs.size[0], 0.5), max(obs.size[1], 0.5)
+        rect = box(
+            -w / 2 - agent_radius,
+            -d / 2 - agent_radius,
+            w / 2 + agent_radius,
+            d / 2 + agent_radius,
+        )
+        rect = affinity.rotate(rect, obs.yaw, use_radians=True)
+        rect = affinity.translate(rect, obs.pos[0], obs.pos[1])
+        ox, oy = rect.exterior.xy
+        ax.fill(ox, oy, color="red", alpha=0.5)
+        ax.text(
+            obs.pos[0], obs.pos[1], obs.node_name,
+            ha="center", va="center", fontsize=7, color="white"
+        )
+
+    # --- All PRM edges -----------------------------------------------------
+    for u, v in graph.edges:
+        x0, y0 = node_positions[u]
+        x1, y1 = node_positions[v]
+        ax.plot([x0, x1], [y0, y1], color="lightgray", linewidth=1, zorder=0)
+
+    # --- Nodes -------------------------------------------------------------
+    for name, (px, py) in node_positions.items():
+        if name.startswith("s"):                      # sample node
+            ax.plot(px, py, "bo", markersize=3)
+        else:                                         # obstacle centre
+            ax.plot(px, py, "ko", markersize=4)
+        ax.text(px, py + 0.04, name, fontsize=6, ha="center")
+
+    # --- Path overlay ------------------------------------------------------
+    if path and len(path) >= 2:
+        coords = [node_positions[n] for n in path]
+        px, py = zip(*coords)
+        ax.plot(px, py, color="green", linewidth=2.5, label="Path", zorder=3)
+        ax.plot(px[0], py[0], "go", markersize=8, label="Start", zorder=4)
+        ax.plot(px[-1], py[-1], "ro", markersize=8, label="Goal",  zorder=4)
+
+    # --- Cosmetics ---------------------------------------------------------
     ax.set_xlabel("X")
     ax.set_ylabel("Z")
-    ax.set_title("PRM Navigation Graph")
-
-    # clean up duplicate legend entries
-    handles, labels = ax.get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    ax.legend(by_label.values(), by_label.keys())
-
+    ax.grid(True, linestyle="--", alpha=0.3)
+    ax.legend(loc="upper right")
+    plt.tight_layout()
     plt.show()
 
 
@@ -132,7 +261,7 @@ def save_data_batch(
     action_list: Sequence,
     base_dir: Union[str, Path],
     *,
-    csv_name: str | None = None,
+    csv_name: Optional[str] = None,
 ) -> None:
     """
     Save a batch of RGB images and all their corresponding actions in one CSV.
