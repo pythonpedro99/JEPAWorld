@@ -109,7 +109,7 @@ class JEPAENV(MiniWorldEnv, utils.EzPickle):
             else:
                 entity = entity_cls(color=named_color, size=size)
 
-            self.place_entity(entity)
+            self.place_entity(entity,min_x= 1.5, max_x= self.size -1.5, min_z= 1.5, max_z= self.size - 1.5)
 
         from miniworld.entity import TextFrame
 

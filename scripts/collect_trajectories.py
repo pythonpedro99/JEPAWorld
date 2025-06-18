@@ -63,12 +63,20 @@ class CollectTrajectories:
         # create output directories
         os.makedirs(self.output_dir, exist_ok=True)
         if self.save_images:
-            images_dir = os.path.join(self.output_dir, "images")
-            os.makedirs(images_dir, exist_ok=True)
+            os.makedirs(os.path.join(self.output_dir, "images"), exist_ok=True)
 
-        # storage
-        self.observations = []  # list of np.ndarray
-        self.actions = []       # list of ints
+        # storage: actions in memory, observations on disk if save_images=False
+        self.actions: list[int] = []
+        if not self.save_images:
+            # memmap dtype assumed uint8 for image pixels
+            self.obs_memmap = np.memmap(
+                os.path.join(self.output_dir, "obs.dat"),
+                dtype=np.uint8,
+                mode='w+',
+                shape=(self.n_samples, 224, 224, 3)
+            )
+
+        # metadata
         self.metadata = {
             "env_id": self.env_id,
             "master_seed": self.master_seed,
@@ -76,26 +84,31 @@ class CollectTrajectories:
             "episodes": []
         }
 
-        # begin collection loop
+        # begin collection
         self._collect_loop()
 
-        # save non-image data and metadata
-        if not self.save_images:
-            np.save(os.path.join(self.output_dir, "obs.npy"), np.array(self.observations, dtype=object))
-            np.save(os.path.join(self.output_dir, "actions.npy"), np.array(self.actions, dtype=np.int32))
+        # save actions + metadata
+        np.save(
+            os.path.join(self.output_dir, "actions.npy"),
+            np.array(self.actions, dtype=np.int32)
+        )
         with open(os.path.join(self.output_dir, "metadata.json"), "w") as f:
             json.dump(self.metadata, f, indent=2)
+
+        print("Collection complete.")
+        if not self.save_images:
+            print(f"Observations saved to {os.path.join(self.output_dir, 'obs.dat')} (memmap file)")
 
     def _collect_loop(self):
         total = 0
         episode_idx = 0
-        while total < self.n_samples:
-            ep_seed = episode_idx #int(self.rng.integers(0, 2**31 - 1))
-            episode_idx += 1
-            # per-episode seed for fresh placement, colors, and agent start
-            
+        ep_seed = 0
 
-            # recreate environment each episode with domain randomization
+        while total < self.n_samples:
+            ep_seed += 1
+            episode_idx += 1
+
+            # recreate environment with domain randomization
             env = gym.make(
                 self.env_id,
                 seed=ep_seed,
@@ -104,55 +117,53 @@ class CollectTrajectories:
                 domain_rand=True
             )
 
-            # run policy on this fresh env
+            # run policy
             policy = HumanLikeRearrangePolicy(env=env, seed=ep_seed)
-            # attempt rearrangement; skip episode if it fails
-            success = policy.rearrange()
-            if not success:
-                print(f"Episode {episode_idx} failed rearrangement; skipping.")
+            if not policy.rearrange():
+                print(f"Episode {episode_idx} failed; skipping.")
+                episode_idx -= 1
+                #ep_seed -= 1
                 continue
-            # retrieve actions and observations from policy
+
             actions = policy.actions
             observations = policy.observations
 
             # record episode metadata
-            ep_meta = {
+            self.metadata["episodes"].append({
                 "episode": episode_idx,
                 "seed": ep_seed,
                 "n_actions": len(actions),
                 "n_observations": len(observations)
-            }
-            self.metadata["episodes"].append(ep_meta)
+            })
 
-            # collect up to n_samples
             for cmd, obs in zip(actions, observations):
-                if total >= self.n_samples:
-                    break
+                
+                # write action
                 self.actions.append(cmd)
-                self.observations.append(obs)
-                # optionally save each image
+
                 if self.save_images:
+                    # save image file
                     img_path = os.path.join(
-                        self.output_dir,
-                        "images",
-                        f"obs_{total+1:04d}.png"
+                        self.output_dir, "images", f"obs_{total+1:06d}.png"
                     )
                     plt.imsave(img_path, obs)
-                total += 1
-                # simple percentage display
-                percent = total / self.n_samples * 100
-                print(f"Progress: {percent:.1f}% ({total}/{self.n_samples})", end='\r')
+                else:
+                    # write to memmap and drop in-memory obs
+                    self.obs_memmap[total] = obs.astype(np.uint8)
 
-        print(f"\nCollected {total} samples over {episode_idx} episodes.")
+                total += 1
+                # progress print
+                pct = total / self.n_samples * 100
+                print(f"Progress: {pct:.2f}% ({total}/{self.n_samples})", end='\r')
+
+        print(f"\nCollected {total} samples in {episode_idx} episodes.")
 
 
 if __name__ == "__main__":
-
-
     register(
-    id="JEPAENV-v0",
-    entry_point="miniworld.envs.jeparoom:JEPAENV",
-    kwargs={"size": 12, "seed": random.randint(0, 2**31 - 1)},
-    max_episode_steps=500,
+        id="JEPAENV-v0",
+        entry_point="miniworld.envs.jeparoom:JEPAENV",
+        kwargs={"size": 12, "seed": random.randint(0, 2**31 - 1)},
+        max_episode_steps=500,
     )
-    CollectTrajectories(save_images=True, n_samples=10000)
+    CollectTrajectories(save_images=True, n_samples=1000)

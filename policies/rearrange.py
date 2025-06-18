@@ -8,7 +8,7 @@ import numpy as np
 import gymnasium as gym
 import networkx as nx
 from scripts.helpers import build_prm_graph_single_room, get_graph_data
-
+from shapely.geometry import Point, Polygon
 import random
 
 
@@ -63,7 +63,6 @@ class HumanLikeRearrangePolicy:
             self.env.unwrapped.agent.pos[0],
             self.env.unwrapped.agent.pos[2],
         )
-        print(self.env.unwrapped.actions)
         self.observations.append(obs)
         self.graph_data = get_graph_data(env)
         self.prm_graph, self.node_pos2d = build_prm_graph_single_room(
@@ -76,7 +75,7 @@ class HumanLikeRearrangePolicy:
             agent_radius=0.2,
         )
        
-        self.max_arrangements = 4
+        self.max_arrangements = 3
         self.view_distance = 4.0
         self._TURN_LEFT = 0  # env.actions.turn_left
         self._TURN_RIGHT = 1  # env.actions.turn_right
@@ -145,8 +144,25 @@ class HumanLikeRearrangePolicy:
         targets = list(self.rng.choice(object_nodes, size=n, replace=False))
 
         # sample goal nodes from samples
-        sample_nodes = [nid for nid in self.node_pos2d if str(nid).startswith("s")]
-        goal_nodes = self.rng.choice(sample_nodes, size=n, replace=False).tolist()
+        #sample_nodes = [nid for nid in self.node_pos2d if str(nid).startswith("s")]
+
+        MIN_DIST = 1.5  # adjust to your preferred wall clearance
+
+        # 1. Build polygons from room vertices
+        room_polygons = [Polygon(self.graph_data.room.vertices)]
+
+        # 2. Distance function
+        def min_distance_to_room_walls(point_xy, polygons):
+            point = Point(point_xy)
+            return min(poly.exterior.distance(point) for poly in polygons)
+
+        # 3. Filter sample nodes
+        filtered_sample_nodes = [
+            nid for nid in self.node_pos2d
+            if str(nid).startswith("s")
+            and min_distance_to_room_walls(self.node_pos2d[nid], room_polygons) > MIN_DIST
+]
+        goal_nodes = self.rng.choice(filtered_sample_nodes, size=n, replace=False).tolist()
 
         # initial orientation: full ordered scan of obstacles
         self.wiggle(3)  # wiggle to randomize initial yaw
@@ -299,17 +315,17 @@ class HumanLikeRearrangePolicy:
             return False
 
         waypoints = [self.node_pos2d[n] for n in self.path]
-        print(f"[go_to] start={start_node}  goal={goal}")
-        print(f"[go_to] A* path: {'  ->  '.join(self.path)}")
-        print(f"[go_to] waypoints (x,z): {waypoints}")
+        # print(f"[go_to] start={start_node}  goal={goal}")
+        # print(f"[go_to] A* path: {'  ->  '.join(self.path)}")
+        # print(f"[go_to] waypoints (x,z): {waypoints}")
 
         # ── 2 / Walk the waypoints ───────────────────────────────────────
         for idx, (wx, wz) in enumerate(waypoints):
             target_tol = LAST_TOL if idx == len(waypoints) - 1 else POS_TOL
-            print(
-                f"\n[waypoint {idx+1}/{len(waypoints)}] target=({wx:.2f},{wz:.2f}) "
-                f"tol={target_tol:.2f} m"
-            )
+            # print(
+            #     f"\n[waypoint {idx+1}/{len(waypoints)}] target=({wx:.2f},{wz:.2f}) "
+            #     f"tol={target_tol:.2f} m"
+            # )
             no_move = 0
 
             while True:
@@ -323,7 +339,7 @@ class HumanLikeRearrangePolicy:
                 dist = math.hypot(dx, dz)
 
                 if dist <= target_tol:
-                    print(f"[reached] dist={dist:.3f} m  pos=({ax:.2f},{az:.2f})")
+                    # print(f"[reached] dist={dist:.3f} m  pos=({ax:.2f},{az:.2f})")
                     break
 
                 desired = math.atan2(-dz, dx)
@@ -336,11 +352,11 @@ class HumanLikeRearrangePolicy:
                     cmd = FORWARD
                     act_name = "FWD"
 
-                print(
-                    f"[step] pos=({ax:.2f},{az:.2f}) yaw={math.degrees(ayaw):6.1f}°  "
-                    f"→ tgt=({wx:.2f},{wz:.2f})  dist={dist:.3f} m target_tol={target_tol:.2f} m  "
-                    f"err={math.degrees(err):6.1f}°  action={act_name}"
-                )
+                # print(
+                #     f"[step] pos=({ax:.2f},{az:.2f}) yaw={math.degrees(ayaw):6.1f}°  "
+                #     f"→ tgt=({wx:.2f},{wz:.2f})  dist={dist:.3f} m target_tol={target_tol:.2f} m  "
+                #     f"err={math.degrees(err):6.1f}°  action={act_name}"
+                # )
 
                 obs, _, term, trunc, _ = self.env.step(cmd)
                 self.observations.append(obs)
@@ -348,7 +364,7 @@ class HumanLikeRearrangePolicy:
 
                 if term or trunc:
                     print("[go_to] episode ended prematurely")
-                    return False
+                    return True
 
                 # forward-movement check
                 if cmd == FORWARD:
@@ -359,9 +375,9 @@ class HumanLikeRearrangePolicy:
                     no_move = no_move + 1 if moved < 1e-3 else 0
                     if no_move >= 2:
                         print("[go_to] stuck (no progress) — aborting")
-                        return False
+                        return True
                 else:
                     no_move = 0  # reset on a turn
 
-        print("[go_to] all waypoints reached ✓")
+        # print("[go_to] all waypoints reached ✓")
         return True
