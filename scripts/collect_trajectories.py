@@ -90,9 +90,10 @@ class CollectTrajectories:
         total = 0
         episode_idx = 0
         while total < self.n_samples:
+            ep_seed = episode_idx #int(self.rng.integers(0, 2**31 - 1))
             episode_idx += 1
             # per-episode seed for fresh placement, colors, and agent start
-            ep_seed = int(self.rng.integers(0, 2**31 - 1))
+            
 
             # recreate environment each episode with domain randomization
             env = gym.make(

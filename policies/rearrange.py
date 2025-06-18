@@ -294,8 +294,8 @@ class HumanLikeRearrangePolicy:
                 ),
                 weight="weight",
             )
-        except nx.NetworkXNoPath:
-            print(f"[go_to] no path from {start_node} to {goal}")
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            print(f"[go_to] A* failed from {start_node} to {goal}: {e}")
             return False
 
         waypoints = [self.node_pos2d[n] for n in self.path]
