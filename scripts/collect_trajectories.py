@@ -178,4 +178,4 @@ class CollectTrajectories:
 
 if __name__ == "__main__":
     _register_environment("JEPAENV-v0")
-    CollectTrajectories(save_images=False, n_samples=7000)
+    CollectTrajectories(save_images=True, n_samples=100)
