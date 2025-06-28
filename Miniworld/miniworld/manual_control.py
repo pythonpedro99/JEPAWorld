@@ -2,6 +2,19 @@ import math
 
 import pyglet
 from pyglet.window import key
+from gymnasium.envs.registration import register
+import numpy as np
+
+register(
+    id="JEPAENV-v0",                      # your chosen Gym ID
+    entry_point="miniworld.envs.jeparoom:JEPAENV",        # module path and class name
+    kwargs={
+        "size": 12,                        # default size (optional)
+        "seed": 734 #np.random.randint(0, 2**31 - 1),                        # default seed (optional)
+    },
+    max_episode_steps=500,                 # match your env’s timeframe
+)
+
 
 
 class ManualControl:

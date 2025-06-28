@@ -132,6 +132,9 @@ class Room:
         wall_tex="concrete",
         ceil_tex="concrete_tiles",
         no_ceiling=False,
+        wall_color=None,
+        floor_color=None,
+        ceil_color=None,
     ):
         # The outlien should have shape Nx2
         assert len(outline.shape) == 2
@@ -185,6 +188,9 @@ class Room:
         self.wall_tex_name = wall_tex
         self.floor_tex_name = floor_tex
         self.ceil_tex_name = ceil_tex
+        self.wall_color = wall_color
+        self.floor_color = floor_color
+        self.ceil_color = ceil_color
 
         # Lists of portals, indexed by wall/edge index
         self.portals = [[] for i in range(self.num_walls)]
@@ -282,28 +288,43 @@ class Room:
 
         # The point is inside if all the dot products are greater than zero
         return np.all(np.greater(dotNAP, 0))
-
+    
     def _gen_static_data(self, params, rng):
         """
-        Generate polygons and static data for this room
-        Needed for rendering and collision detection
-        Note: the wall polygons are quads, but the floor and
-              ceiling can be arbitrary n-gons
+        Generate polygons and static data for this room.
+        Handles both texture and solid RGB color rendering.
         """
 
-        # Load the textures and do texture randomization
-        self.wall_tex = Texture.get(self.wall_tex_name, rng)
-        self.floor_tex = Texture.get(self.floor_tex_name, rng)
-        self.ceil_tex = Texture.get(self.ceil_tex_name, rng)
+        # Determine wall rendering method
+        if self.wall_color is None:
+            self.wall_tex = Texture.get(self.wall_tex_name, rng)
+        else:
+            self.wall_tex = self.wall_color  # tuple like (r,g,b)
 
-        # Generate the floor vertices
+        if self.floor_color is None:
+            self.floor_tex = Texture.get(self.floor_tex_name, rng)
+        else:
+            self.floor_tex = self.floor_color
+
+        if self.ceil_color is None:
+            self.ceil_tex = Texture.get(self.ceil_tex_name, rng)
+        else:
+            self.ceil_tex = self.ceil_color
+
+        # Geometry for floor and ceiling
         self.floor_verts = self.outline
-        self.floor_texcs = gen_texcs_floor(self.floor_tex, self.floor_verts)
 
-        # Generate the ceiling vertices
-        # Flip the ceiling vertex order because of backface culling
+        if isinstance(self.floor_tex, Texture):
+            self.floor_texcs = gen_texcs_floor(self.floor_tex, self.floor_verts)
+        else:
+            self.floor_texcs = np.zeros((self.floor_verts.shape[0], 2), dtype=np.float32)
+
         self.ceil_verts = np.flip(self.outline, axis=0) + self.wall_height * Y_VEC
-        self.ceil_texcs = gen_texcs_floor(self.ceil_tex, self.ceil_verts)
+
+        if isinstance(self.ceil_tex, Texture):
+            self.ceil_texcs = gen_texcs_floor(self.ceil_tex, self.ceil_verts)
+        else:
+            self.ceil_texcs = np.zeros((self.ceil_verts.shape[0], 2), dtype=np.float32)
 
         self.wall_verts = []
         self.wall_norms = []
@@ -311,39 +332,37 @@ class Room:
         self.wall_segs = []
 
         def gen_seg_poly(edge_p0, side_vec, seg_start, seg_end, min_y, max_y):
-            if seg_end == seg_start:
-                return
-
-            if min_y == max_y:
+            if seg_end == seg_start or min_y == max_y:
                 return
 
             s_p0 = edge_p0 + seg_start * side_vec
             s_p1 = edge_p0 + seg_end * side_vec
 
-            # If this polygon starts at ground level, add a collidable segment
             if min_y == 0:
                 self.wall_segs.append(np.array([s_p1, s_p0]))
 
-            # Generate the vertices
-            # Vertices are listed in counter-clockwise order
+            # Vertex order: CCW
             self.wall_verts.append(s_p0 + min_y * Y_VEC)
             self.wall_verts.append(s_p0 + max_y * Y_VEC)
             self.wall_verts.append(s_p1 + max_y * Y_VEC)
             self.wall_verts.append(s_p1 + min_y * Y_VEC)
 
-            # Compute the normal for the polygon
             normal = np.cross(s_p1 - s_p0, Y_VEC)
             normal = -normal / np.linalg.norm(normal)
-            for i in range(4):
+            for _ in range(4):
                 self.wall_norms.append(normal)
 
-            # Generate the texture coordinates
-            texcs = gen_texcs_wall(
-                self.wall_tex, seg_start, min_y, seg_end - seg_start, max_y - min_y
-            )
+            if isinstance(self.wall_tex, Texture):
+                texcs = gen_texcs_wall(
+                    self.wall_tex, seg_start, min_y,
+                    seg_end - seg_start, max_y - min_y
+                )
+            else:
+                texcs = np.zeros((4, 2), dtype=np.float32)
+
             self.wall_texcs.append(texcs)
 
-        # For each wall
+        # Build geometry for each wall
         for wall_idx in range(self.num_walls):
             edge_p0 = self.outline[wall_idx, :]
             edge_p1 = self.outline[(wall_idx + 1) % self.num_walls, :]
@@ -355,58 +374,163 @@ class Room:
             else:
                 seg_end = wall_width
 
-            # Generate the first polygon (going up to the first portal)
             gen_seg_poly(edge_p0, side_vec, 0, seg_end, 0, self.wall_height)
 
-            # For each portal in this wall
             for portal_idx, portal in enumerate(self.portals[wall_idx]):
-                portal = self.portals[wall_idx][portal_idx]
                 start_pos = portal["start_pos"]
                 end_pos = portal["end_pos"]
                 min_y = portal["min_y"]
                 max_y = portal["max_y"]
 
-                # Generate the bottom polygon
                 gen_seg_poly(edge_p0, side_vec, start_pos, end_pos, 0, min_y)
-
-                # Generate the top polygon
-                gen_seg_poly(
-                    edge_p0, side_vec, start_pos, end_pos, max_y, self.wall_height
-                )
+                gen_seg_poly(edge_p0, side_vec, start_pos, end_pos, max_y, self.wall_height)
 
                 if portal_idx < len(self.portals[wall_idx]) - 1:
-                    next_portal = self.portals[wall_idx][portal_idx + 1]
-                    next_portal_start = next_portal["start_pos"]
+                    next_start = self.portals[wall_idx][portal_idx + 1]["start_pos"]
                 else:
-                    next_portal_start = wall_width
+                    next_start = wall_width
 
-                # Generate the polygon going up to the next portal
-                gen_seg_poly(
-                    edge_p0, side_vec, end_pos, next_portal_start, 0, self.wall_height
-                )
+                gen_seg_poly(edge_p0, side_vec, end_pos, next_start, 0, self.wall_height)
 
         self.wall_verts = np.array(self.wall_verts)
         self.wall_norms = np.array(self.wall_norms)
 
-        if len(self.wall_segs) > 0:
-            self.wall_segs = np.array(self.wall_segs)
-        else:
-            self.wall_segs = np.array([]).reshape(0, 2, 3)
+        self.wall_segs = (
+            np.array(self.wall_segs) if self.wall_segs
+            else np.array([]).reshape(0, 2, 3)
+        )
 
-        if len(self.wall_texcs) > 0:
-            self.wall_texcs = np.concatenate(self.wall_texcs)
-        else:
-            self.wall_texcs = np.array([]).reshape(0, 2)
+        self.wall_texcs = (
+            np.concatenate(self.wall_texcs) if self.wall_texcs
+            else np.array([]).reshape(0, 2)
+        )
+
+    # def _gen_static_data(self, params, rng):
+    #     """
+    #     Generate polygons and static data for this room
+    #     Needed for rendering and collision detection
+    #     Note: the wall polygons are quads, but the floor and
+    #           ceiling can be arbitrary n-gons
+    #     """
+
+    #     # Load the textures and do texture randomization
+    #     self.wall_tex = Texture.get(self.wall_tex_name, rng)
+    #     self.floor_tex = Texture.get(self.floor_tex_name, rng)
+    #     self.ceil_tex = Texture.get(self.ceil_tex_name, rng)
+
+    #     # Generate the floor vertices
+    #     self.floor_verts = self.outline
+    #     self.floor_texcs = gen_texcs_floor(self.floor_tex, self.floor_verts)
+
+    #     # Generate the ceiling vertices
+    #     # Flip the ceiling vertex order because of backface culling
+    #     self.ceil_verts = np.flip(self.outline, axis=0) + self.wall_height * Y_VEC
+    #     self.ceil_texcs = gen_texcs_floor(self.ceil_tex, self.ceil_verts)
+
+    #     self.wall_verts = []
+    #     self.wall_norms = []
+    #     self.wall_texcs = []
+    #     self.wall_segs = []
+
+    #     def gen_seg_poly(edge_p0, side_vec, seg_start, seg_end, min_y, max_y):
+    #         if seg_end == seg_start:
+    #             return
+
+    #         if min_y == max_y:
+    #             return
+
+    #         s_p0 = edge_p0 + seg_start * side_vec
+    #         s_p1 = edge_p0 + seg_end * side_vec
+
+    #         # If this polygon starts at ground level, add a collidable segment
+    #         if min_y == 0:
+    #             self.wall_segs.append(np.array([s_p1, s_p0]))
+
+    #         # Generate the vertices
+    #         # Vertices are listed in counter-clockwise order
+    #         self.wall_verts.append(s_p0 + min_y * Y_VEC)
+    #         self.wall_verts.append(s_p0 + max_y * Y_VEC)
+    #         self.wall_verts.append(s_p1 + max_y * Y_VEC)
+    #         self.wall_verts.append(s_p1 + min_y * Y_VEC)
+
+    #         # Compute the normal for the polygon
+    #         normal = np.cross(s_p1 - s_p0, Y_VEC)
+    #         normal = -normal / np.linalg.norm(normal)
+    #         for i in range(4):
+    #             self.wall_norms.append(normal)
+
+    #         # Generate the texture coordinates
+    #         texcs = gen_texcs_wall(
+    #             self.wall_tex, seg_start, min_y, seg_end - seg_start, max_y - min_y
+    #         )
+    #         self.wall_texcs.append(texcs)
+
+    #     # For each wall
+    #     for wall_idx in range(self.num_walls):
+    #         edge_p0 = self.outline[wall_idx, :]
+    #         edge_p1 = self.outline[(wall_idx + 1) % self.num_walls, :]
+    #         wall_width = np.linalg.norm(edge_p1 - edge_p0)
+    #         side_vec = (edge_p1 - edge_p0) / wall_width
+
+    #         if len(self.portals[wall_idx]) > 0:
+    #             seg_end = self.portals[wall_idx][0]["start_pos"]
+    #         else:
+    #             seg_end = wall_width
+
+    #         # Generate the first polygon (going up to the first portal)
+    #         gen_seg_poly(edge_p0, side_vec, 0, seg_end, 0, self.wall_height)
+
+    #         # For each portal in this wall
+    #         for portal_idx, portal in enumerate(self.portals[wall_idx]):
+    #             portal = self.portals[wall_idx][portal_idx]
+    #             start_pos = portal["start_pos"]
+    #             end_pos = portal["end_pos"]
+    #             min_y = portal["min_y"]
+    #             max_y = portal["max_y"]
+
+    #             # Generate the bottom polygon
+    #             gen_seg_poly(edge_p0, side_vec, start_pos, end_pos, 0, min_y)
+
+    #             # Generate the top polygon
+    #             gen_seg_poly(
+    #                 edge_p0, side_vec, start_pos, end_pos, max_y, self.wall_height
+    #             )
+
+    #             if portal_idx < len(self.portals[wall_idx]) - 1:
+    #                 next_portal = self.portals[wall_idx][portal_idx + 1]
+    #                 next_portal_start = next_portal["start_pos"]
+    #             else:
+    #                 next_portal_start = wall_width
+
+    #             # Generate the polygon going up to the next portal
+    #             gen_seg_poly(
+    #                 edge_p0, side_vec, end_pos, next_portal_start, 0, self.wall_height
+    #             )
+
+    #     self.wall_verts = np.array(self.wall_verts)
+    #     self.wall_norms = np.array(self.wall_norms)
+
+    #     if len(self.wall_segs) > 0:
+    #         self.wall_segs = np.array(self.wall_segs)
+    #     else:
+    #         self.wall_segs = np.array([]).reshape(0, 2, 3)
+
+    #     if len(self.wall_texcs) > 0:
+    #         self.wall_texcs = np.concatenate(self.wall_texcs)
+    #     else:
+    #         self.wall_texcs = np.array([]).reshape(0, 2)
+
 
     def _render(self):
-        """
-        Render the static elements of the room
-        """
+        # --- Floor ---
+        if self.floor_color:
+            glDisable(GL_TEXTURE_2D)
+            glColor3f(*(c / 255.0 for c in self.floor_color))
+        else:
+            self.floor_tex.bind()
+            glEnable(GL_TEXTURE_2D)
+            glColor3f(1, 1, 1)
 
-        glColor3f(1, 1, 1)
-
-        # Draw the floor
-        self.floor_tex.bind()
         glBegin(GL_POLYGON)
         glNormal3f(0, 1, 0)
         for i in range(self.floor_verts.shape[0]):
@@ -414,9 +538,16 @@ class Room:
             glVertex3f(*self.floor_verts[i, :])
         glEnd()
 
-        # Draw the ceiling
+        # --- Ceiling ---
         if not self.no_ceiling:
-            self.ceil_tex.bind()
+            if self.ceil_color:
+                glDisable(GL_TEXTURE_2D)
+                glColor3f(*(c / 255.0 for c in self.ceil_color))
+            else:
+                self.ceil_tex.bind()
+                glEnable(GL_TEXTURE_2D)
+                glColor3f(1, 1, 1)
+
             glBegin(GL_POLYGON)
             glNormal3f(0, -1, 0)
             for i in range(self.ceil_verts.shape[0]):
@@ -424,14 +555,60 @@ class Room:
                 glVertex3f(*self.ceil_verts[i, :])
             glEnd()
 
-        # Draw the walls
-        self.wall_tex.bind()
+        # --- Walls ---
+        if self.wall_color:
+            glDisable(GL_TEXTURE_2D)
+            glColor3f(*(c / 255.0 for c in self.wall_color))
+        else:
+            self.wall_tex.bind()
+            glEnable(GL_TEXTURE_2D)
+            glColor3f(1, 1, 1)
+
         glBegin(GL_QUADS)
         for i in range(self.wall_verts.shape[0]):
             glNormal3f(*self.wall_norms[i, :])
             glTexCoord2f(*self.wall_texcs[i, :])
             glVertex3f(*self.wall_verts[i, :])
         glEnd()
+
+        # Restore defaults
+        glEnable(GL_TEXTURE_2D)
+        glColor3f(1, 1, 1)
+
+    # def _render(self):
+    #     """
+    #     Render the static elements of the room
+    #     """
+
+    #     glColor3f(1, 1, 1)
+
+    #     # Draw the floor
+    #     self.floor_tex.bind()
+    #     glBegin(GL_POLYGON)
+    #     glNormal3f(0, 1, 0)
+    #     for i in range(self.floor_verts.shape[0]):
+    #         glTexCoord2f(*self.floor_texcs[i, :])
+    #         glVertex3f(*self.floor_verts[i, :])
+    #     glEnd()
+
+    #     # Draw the ceiling
+    #     if not self.no_ceiling:
+    #         self.ceil_tex.bind()
+    #         glBegin(GL_POLYGON)
+    #         glNormal3f(0, -1, 0)
+    #         for i in range(self.ceil_verts.shape[0]):
+    #             glTexCoord2f(*self.ceil_texcs[i, :])
+    #             glVertex3f(*self.ceil_verts[i, :])
+    #         glEnd()
+
+    #     # Draw the walls
+    #     self.wall_tex.bind()
+    #     glBegin(GL_QUADS)
+    #     for i in range(self.wall_verts.shape[0]):
+    #         glNormal3f(*self.wall_norms[i, :])
+    #         glTexCoord2f(*self.wall_texcs[i, :])
+    #         glVertex3f(*self.wall_verts[i, :])
+    #     glEnd()
 
 
 class MiniWorldEnv(gym.Env):
@@ -729,38 +906,44 @@ class MiniWorldEnv(gym.Env):
 
         return obs, reward, termination, truncation, {}
 
-    def add_rect_room(self, min_x, max_x, min_z, max_z, **kwargs):
+    def add_rect_room(self, min_x, max_x, min_z, max_z, wall_color=None, floor_color=None, ceil_color=None, **kwargs):
         """
-        Create a rectangular room
+        Create a rectangular room with optional color customization.
         """
-
         # 2D outline coordinates of the room,
         # listed in counter-clockwise order when viewed from the top
         outline = np.array(
             [
-                # East wall
-                [max_x, max_z],
-                # North wall
-                [max_x, min_z],
-                # West wall
-                [min_x, min_z],
-                # South wall
-                [min_x, max_z],
+                [max_x, max_z],  # East wall
+                [max_x, min_z],  # North wall
+                [min_x, min_z],  # West wall
+                [min_x, max_z],  # South wall
             ]
         )
 
-        return self.add_room(outline=outline, **kwargs)
+        return self.add_room(
+            outline=outline,
+            wall_color=wall_color,
+            floor_color=floor_color,
+            ceil_color=ceil_color,
+            **kwargs
+        )
 
-    def add_room(self, **kwargs):
+    def add_room(self, outline, wall_color=None, floor_color=None, ceil_color=None, **kwargs):
         """
-        Create a new room
+        Create a new room with optional color customization.
         """
-
         assert (
             len(self.wall_segs) == 0
-        ), "cannot add rooms after static data is generated"
+        ), "Cannot add rooms after static data is generated"
 
-        room = Room(**kwargs)
+        room = Room(
+            outline=outline,
+            wall_color=wall_color,
+            floor_color=floor_color,
+            ceil_color=ceil_color,
+            **kwargs
+        )
         self.rooms.append(room)
 
         return room
