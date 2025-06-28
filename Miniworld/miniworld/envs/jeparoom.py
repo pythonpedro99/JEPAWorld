@@ -16,9 +16,10 @@ class JEPAENV(MiniWorldEnv, utils.EzPickle):
     and randomly placed objects (balls, boxes, keys) that are visually distinguishable.
     """
 
-    def __init__(self, size=10, seed=0, max_entities=5, **kwargs):
+    def __init__(self, size=2, seed=0, max_entities=4, **kwargs):
         assert size >= 2
-        self.size = size
+        self.size_a = 6
+        self.size_b = 8
         self.max_entities = max_entities
         self.rng = random.Random(seed)
         self.np_rng = np.random.default_rng(seed)
@@ -48,9 +49,9 @@ class JEPAENV(MiniWorldEnv, utils.EzPickle):
         # Create a rectangular room with the specified colors
         self.add_rect_room(
             min_x=0,
-            max_x=self.size,
+            max_x=self.size_a,
             min_z=0,
-            max_z=self.size,
+            max_z=self.size_b,
             wall_tex=None,
             floor_tex=None,
             ceil_tex=None,
@@ -59,70 +60,73 @@ class JEPAENV(MiniWorldEnv, utils.EzPickle):
             ceil_color=ceil_color
         )
 
-        # Place the agent inside the room
-        offset = 0.5
-        min_x, max_x = 0.0, self.size
-        min_z, max_z = 0.0, self.size
-        corners = [
-            (min_x + offset, min_z + offset),
-            (min_x + offset, max_z - offset),
-            (max_x - offset, min_z + offset),
-            (max_x - offset, max_z - offset),
-        ]
+        offset_from_wall = 0.7          # how far the agent stands in from the wall
+        min_x, max_x = 0.0, self.size_a
+        min_z, max_z = 0.0, self.size_b
 
-        # pick one at random
-        cx, cz = self.rng.choice(corners)
+        # Mid-point of the south wall (z is small)
+        agent_x = (min_x + max_x) / 2
+        agent_z = min_z + offset_from_wall
 
-        # compute yaw so the agent faces the room center
+        # Yaw so the agent faces the room centre
         center_x = (min_x + max_x) / 2
         center_z = (min_z + max_z) / 2
-        dx = center_x - cx
-        dz = center_z - cz
-        yaw = math.atan2(-dz, dx)
+        dx = center_x - agent_x
+        dz = center_z - agent_z
+        yaw = math.atan2(-dz, dx)        # MiniWorld’s convention
 
-        # place the agent at (cx, cz), keeping its default height, and set its direction
+        # Place the agent
         self.place_agent(
-            pos=(cx, 0, cz),
+            pos=(agent_x, 0, agent_z),
             dir=yaw,
-            min_x=min_x,
-            max_x=max_x,
-            min_z=min_z,
-            max_z=max_z,
+            min_x=min_x, max_x=max_x,
+            min_z=min_z, max_z=max_z,
         )
-
         # Possible entity classes
         entity_classes = [Box, Ball, Key]
 
         # Generate distinct entity colors (RGB) with contrast to background
         
 
-        # Place entities
-        for i in range(self.max_entities):
+        min_x, max_x = 1.3, self.size_a - 1.3
+        min_z, max_z = 3.75, self.size_b - 2.5
+
+        fixed_radius = 0.25
+        min_sep = 2 * fixed_radius + 0.1  # 0.7 = no overlap + small buffer
+
+        positions = []
+        # keep sampling until we have exactly max_entities well-spaced points
+        while len(positions) < self.max_entities:
+            x = self.rng.uniform(min_x, max_x)
+            z = self.rng.uniform(min_z, max_z)
+            # check against existing positions
+            if all(math.hypot(x - px, z - pz) >= min_sep for px, pz in positions):
+                positions.append((x, z))
+
+        for (x,z) in positions:
+            yaw = self.rng.uniform(0.0, 2*math.pi)
             entity_cls = self.rng.choice(entity_classes)
-            size = self.rng.uniform(0.4, 0.85)
+            size = self.rng.uniform(0.2, 0.5)
             named_color = self.rng.choice(COLOR_NAMES)
 
-            if entity_cls == Key:
-                # Keys only accept named colors
-                
+            if entity_cls is Key:
                 entity = Key(color=named_color)
             else:
                 entity = entity_cls(color=named_color, size=size)
 
-            self.place_entity(entity,min_x= 1.5, max_x= self.size -1.5, min_z= 1.5, max_z= self.size - 1.5)
-
-        from miniworld.entity import TextFrame
+            # Place into the world at that exact pose
+            self.place_entity(entity, pos=(x, 0,z), dir=yaw)
 
         # After room creation and agent placement
         frame_height = 1.0
-        frame_depth = 0.05
+        frame_depth = 0.75
         text_y = 1.2  # vertical placement on the wall
 
         wall_labels = [
-    ("North", (self.size / 2, text_y, self.size - 0.05), math.pi / 2),    # Blick +x
-    ("South", (self.size / 2, text_y, 0.05), -math.pi / 2),               # Blick -x
-    ("West",  (0.05, text_y, self.size / 2), 0),                          # Blick +z
-    ("East",  (self.size - 0.05, text_y, self.size / 2), -math.pi),       # Blick -z
+    ("North", (self.size_a / 2, text_y, self.size_b - 0.05), math.pi / 2),    # Blick +x
+    ("South", (self.size_a / 2, text_y, 0.05), -math.pi / 2),               # Blick -x
+    ("West",  (0.05, text_y, self.size_b / 2), 0),                          # Blick +z
+    ("East",  (self.size_a - 0.05, text_y, self.size_b / 2), -math.pi),       # Blick -z
 ]
 
 

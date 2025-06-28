@@ -1,38 +1,48 @@
-
+import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple, Union
+
+import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon as MplPolygon, Rectangle
 import networkx as nx
 import numpy as np
-
-@dataclass
-class Portal:
-    """
-    Represents a doorway between rooms.
-    """
-
-    edge_index: int
-    start: Tuple[float, float]
-    end: Tuple[float, float]
-    midpoint: Tuple[float, float]
+from PIL import Image
+from shapely import affinity
+from shapely.geometry import LineString, Point, Polygon, box
 
 
 @dataclass
 class Room:
     """
-    Represents a room with its polygon outline and portals.
-    """
+    Dataclass representing a room.
 
+    Attributes
+    ----------
+    id : int
+        Unique identifier for the room.
+    vertices : List[Tuple[float, float]]
+        List of (x, z) vertex coordinates defining the room polygon.
+    """
     id: int
     vertices: List[Tuple[float, float]]
-    portals: List[Portal]
 
 
 @dataclass
 class Agent:
     """
-    Represents the navigating agent.
-    """
+    Dataclass representing an agent in the environment.
 
+    Attributes
+    ----------
+    pos : Tuple[float, float]
+        Current (x, z) position of the agent.
+    yaw : float
+        Current orientation of the agent in radians.
+    radius : float
+        Radius of the agent for collision checking.
+    """
     pos: Tuple[float, float]
     yaw: float
     radius: float
@@ -41,9 +51,23 @@ class Agent:
 @dataclass
 class Obstacle:
     """
-    Represents a static obstacle in the environment.
-    """
+    Dataclass representing an obstacle in the environment.
 
+    Attributes
+    ----------
+    type : str
+        Type of the obstacle (e.g., 'Box', 'Ball', 'Key').
+    pos : Tuple[float, float]
+        (x, z) position of the obstacle.
+    radius : float
+        Radius of the obstacle.
+    node_name : str
+        Name of the PRM graph node corresponding to the obstacle.
+    yaw : float
+        Orientation of the obstacle in radians.
+    size : Tuple[float, float]
+        Width and depth of the obstacle.
+    """
     type: str
     pos: Tuple[float, float]
     radius: float
@@ -57,119 +81,308 @@ class GraphData:
     """
     Aggregates rooms, agent, and obstacle data for graph building.
     """
-
-    rooms: List[Room]
+    room: Room
     obstacles: List[Obstacle]
 
 
-def closest_node(node_positions: Dict[str, Tuple[float, float]], pos: Tuple[float, float]) -> str:
-    """Return the node id closest to the given position."""
-    px, py = pos
-    best = None
-    best_dist = float('inf')
-    for name, (nx_pos, ny_pos) in node_positions.items():
-        dist = (nx_pos - px) ** 2 + (ny_pos - py) ** 2
-        if dist < best_dist:
-            best_dist = dist
-            best = name
-    return best
-
-
-def find_path(
-    graph: nx.Graph,
-    nodes: List[str],
-    start: str | Tuple[float, float],
-    goal: str,
-    node_positions: Optional[Dict[str, Tuple[float, float]]] = None,
-) -> Optional[List[str]]:
-
-    """Return the shortest path from ``start`` to ``goal``.
-
-    ``start`` may be either a node id or an ``(x, y)`` coordinate. In the latter
-    case ``node_positions`` must be provided and the nearest node to the
-    coordinate will be used as the starting node.
+def get_graph_data(env) -> GraphData:
     """
+    Convert MiniWorld environment entities into lightweight dataclasses.
 
-    if isinstance(start, (tuple, list)):
-        if node_positions is None:
-            raise ValueError("node_positions required when start is coordinates")
-        start = closest_node(node_positions, tuple(start))
+    Parameters
+    ----------
+    env : gym.Env
+        The MiniWorld environment.
 
-    if not graph.has_node(start) or not graph.has_node(goal):
-        return None
+    Returns
+    -------
+    GraphData
+        Object containing room and obstacle data.
+    """
+    unwrapped = env.unwrapped
+    rm = unwrapped.rooms[0]
+    room_polygon = [(p[0], p[2]) for p in rm.outline]
+    room = Room(id=0, vertices=room_polygon)
 
-    to_remove = set(nodes) - {start, goal}
-    G = graph.copy()
-    G.remove_nodes_from(to_remove)
-    if not G.has_node(start) or not G.has_node(goal):
-        return None
+    obstacles: List[Obstacle] = []
+    for idx, ent in enumerate(unwrapped.entities):
+        yaw = getattr(ent, "dir", 0.0)
+        if hasattr(ent, "size"):
+            sx, _, sz = ent.size
+            width, depth = sx, sz
+        elif hasattr(ent, "mesh") and hasattr(ent.mesh, "min_coords"):
+            width = (ent.mesh.max_coords[0] - ent.mesh.min_coords[0]) * ent.scale
+            depth = (ent.mesh.max_coords[2] - ent.mesh.min_coords[2]) * ent.scale
+        else:
+            width = depth = getattr(ent, "radius", 0.0) * 2
 
-    try:
-        return nx.dijkstra_path(G, start, goal, weight="weight")
-    except nx.NetworkXNoPath:
-        return None
-
-
-def smooth_path(pts, iterations=3):
-        """
-        Apply Chaikin's corner-cutting algorithm to generate a smoother polyline.
-        Each iteration replaces each segment [P0, P1] with two points:
-          Q = 0.75*P0 + 0.25*P1
-          R = 0.25*P0 + 0.75*P1
-        This rounds off sharp turns gradually.
-        """
-        path = pts.copy()
-        for _ in range(iterations):
-            new_path = [path[0]]
-            for i in range(len(path)-1):
-                p0 = np.array(path[i])
-                p1 = np.array(path[i+1])
-                q = tuple(0.75*p0 + 0.25*p1)
-                r = tuple(0.25*p0 + 0.75*p1)
-                new_path.extend([q, r])
-            new_path.append(path[-1])
-            path = new_path
-        return path
-
-def get_lookahead_point(path_pts, pos, L):
-    cum = 0
-    last = np.array(pos)
-    for pt in path_pts:
-        nxt = np.array(pt)
-        cum += np.linalg.norm(nxt - last)
-        if cum >= L:
-            return nxt
-        last = nxt
-    return path_pts[-1]
-
-
-
-def perform_full_scan(self, yaw_tol_deg: float = 10.0):
-        """
-        Ordered scan: rotate to face each obstacle once by sorting them by bearing.
-        Uses turn_towards on each obstacle node.
-        """
-        agent = self.env.unwrapped.agent
-        # gather obstacle nodes (exclude samples, agent, text frames)
-        obstacle_nodes = [
-            nid
-            for nid in self.node_pos2d
-            if not any(
-                str(nid).startswith(pref) for pref in ("Agent", "TextFrame", "s")
+        obstacles.append(
+            Obstacle(
+                type=ent.__class__.__name__,
+                pos=(ent.pos[0], ent.pos[2]),
+                radius=getattr(ent, "radius", 0.0),
+                node_name=f"{ent.__class__.__name__}_{idx}",
+                yaw=yaw,
+                size=(width, depth),
             )
+        )
+
+    return GraphData(room=room, obstacles=obstacles)
+
+
+def build_prm_graph_single_room(
+    graph_data: GraphData,
+    sample_density: float = 0.3,
+    k_neighbors: int = 15,
+    jitter_ratio: float = 0.3,
+    min_samples: int = 5,
+    min_dist: float = 0.2,
+    agent_radius: float = 0.3,
+) -> Tuple[nx.Graph, Dict[str, Tuple[float, float]]]:
+    """
+    Build a probabilistic-roadmap graph for a single room environment.
+
+    Parameters
+    ----------
+    graph_data : GraphData
+        Aggregated room and obstacle data.
+    sample_density : float, optional
+        Density of random samples, by default 0.3.
+    k_neighbors : int, optional
+        Number of nearest neighbors for connections, by default 15.
+    jitter_ratio : float, optional
+        Fraction for jittering sample positions, by default 0.3.
+    min_samples : int, optional
+        Minimum number of samples, by default 5.
+    min_dist : float, optional
+        Minimum distance from walls for sampling, by default 0.2.
+    agent_radius : float, optional
+        Radius of the agent for collision checking, by default 0.3.
+
+    Returns
+    -------
+    Tuple[nx.Graph, Dict[str, Tuple[float, float]]]
+        PRM graph and dictionary mapping node names to positions.
+    """
+    graph = nx.Graph()
+    room_poly = Polygon(graph_data.room.vertices)
+
+    inflated: Dict[str, Polygon] = {}
+    for obs in graph_data.obstacles:
+        w, d = max(obs.size[0], 0.5), max(obs.size[1], 0.5)
+        rect = box(
+            -w / 2 - agent_radius,
+            -d / 2 - agent_radius,
+            w / 2 + agent_radius,
+            d / 2 + agent_radius,
+        )
+        rect = affinity.rotate(rect, obs.yaw, use_radians=True)
+        rect = affinity.translate(rect, obs.pos[0], obs.pos[1])
+        inflated[obs.node_name] = rect
+
+    node_pos: Dict[str, Tuple[float, float]] = {}
+    for obs in graph_data.obstacles:
+        node_pos[obs.node_name] = obs.pos
+        graph.add_node(obs.node_name)
+
+    inner = room_poly.buffer(-min_dist) or room_poly
+    n_samples = max(min_samples, int(room_poly.area * sample_density))
+    grid = max(1, int(np.sqrt(n_samples)))
+    minx, miny, maxx, maxy = inner.bounds
+    dx, dy = (maxx - minx) / grid, (maxy - miny) / grid
+    counter = 0
+
+    for i in range(grid):
+        for j in range(grid):
+            if counter >= n_samples:
+                break
+            cx, cy = minx + (i + 0.5) * dx, miny + (j + 0.5) * dy
+            x = cx + (random.random() - 0.5) * dx * jitter_ratio
+            y = cy + (random.random() - 0.5) * dy * jitter_ratio
+            pt = Point(x, y)
+            if not inner.covers(pt):
+                continue
+            if any(poly.contains(pt) for poly in inflated.values()):
+                continue
+            node_name = f"s{counter}"
+            node_pos[node_name] = (x, y)
+            graph.add_node(node_name)
+            counter += 1
+
+    nodes = list(node_pos)
+    for n in nodes:
+        p_n = np.asarray(node_pos[n])
+        dists = [
+            (m, np.sum((p_n - np.asarray(node_pos[m])) ** 2))
+            for m in nodes
+            if m != n
         ]
-        # compute bearing for each obstacle
-        angles = []
-        for nid in obstacle_nodes:
-            x, z = self.node_pos2d[nid]
-            dx = x - agent.pos[0]
-            dz = z - agent.pos[2]
-            bearing = math.atan2(-dz, dx)
-            angles.append((bearing, nid))
-        # sort by bearing
-        angles.sort(key=lambda x: x[0])
-        # rotate to face each in order
-       
-        for _, nid in angles:
-            target_pos = self.node_pos2d[nid]
-            self.turn_towards(target_pos, yaw_tol_deg)
+        dists.sort(key=lambda t: t[1])
+
+        for m, _ in dists[:k_neighbors]:
+            seg = LineString([node_pos[n], node_pos[m]])
+            if not room_poly.covers(seg):
+                continue
+            skip = False
+            for obs_name, poly in inflated.items():
+                if obs_name in (n, m):
+                    continue
+                if poly.intersects(seg):
+                    skip = True
+                    break
+            if skip:
+                continue
+            graph.add_edge(n, m, weight=seg.length)
+
+    return graph, node_pos
+
+
+def plot_room_with_obstacles_and_path(
+    room_polygon: Polygon,
+    obstacles: List[Obstacle],
+    node_positions: Dict[str, Tuple[float, float]],
+    graph: nx.Graph,
+    path: Optional[List[str]] = None,
+    agent_radius: float = 0.25,
+    title: str = "Room with Obstacles and Path",
+) -> None:
+    """
+    Visualize the room, obstacles, PRM graph, and an optional path.
+
+    Parameters
+    ----------
+    room_polygon : Polygon
+        Shapely polygon of the room.
+    obstacles : List[Obstacle]
+        List of obstacles in the environment.
+    node_positions : Dict[str, Tuple[float, float]]
+        Mapping of node names to their coordinates.
+    graph : nx.Graph
+        PRM graph.
+    path : Optional[List[str]], optional
+        Sequence of node names defining a path, by default None.
+    agent_radius : float, optional
+        Radius for inflating obstacles, by default 0.25.
+    title : str, optional
+        Title for the plot, by default "Room with Obstacles and Path".
+
+    Returns
+    -------
+    None
+    """
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_aspect("equal")
+    ax.set_title(title)
+
+    rx, ry = room_polygon.exterior.xy
+    ax.plot(rx, ry, color="black", linewidth=2, label="Room")
+
+    for obs in obstacles:
+        w, d = max(obs.size[0], 0.5), max(obs.size[1], 0.5)
+        rect = box(
+            -w / 2 - agent_radius,
+            -d / 2 - agent_radius,
+            w / 2 + agent_radius,
+            d / 2 + agent_radius,
+        )
+        rect = affinity.rotate(rect, obs.yaw, use_radians=True)
+        rect = affinity.translate(rect, obs.pos[0], obs.pos[1])
+        ox, oy = rect.exterior.xy
+        ax.fill(ox, oy, color="red", alpha=0.5)
+        ax.text(
+            obs.pos[0], obs.pos[1], obs.node_name,
+            ha="center", va="center", fontsize=7, color="white"
+        )
+
+    for u, v in graph.edges:
+        x0, y0 = node_positions[u]
+        x1, y1 = node_positions[v]
+        ax.plot([x0, x1], [y0, y1], color="lightgray", linewidth=1, zorder=0)
+
+    for name, (px, py) in node_positions.items():
+        if name.startswith("s"):
+            ax.plot(px, py, "bo", markersize=3)
+        else:
+            ax.plot(px, py, "ko", markersize=4)
+        ax.text(px, py + 0.04, name, fontsize=6, ha="center")
+
+    if path and len(path) >= 2:
+        coords = [node_positions[n] for n in path]
+        px, py = zip(*coords)
+        ax.plot(px, py, color="green", linewidth=2.5, label="Path", zorder=3)
+        ax.plot(px[0], py[0], "go", markersize=8, label="Start", zorder=4)
+        ax.plot(px[-1], py[-1], "ro", markersize=8, label="Goal", zorder=4)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Z")
+    ax.grid(True, linestyle="--", alpha=0.3)
+    ax.legend(loc="upper right")
+    plt.tight_layout()
+    plt.show()
+
+
+def save_data_batch(
+    obs_list: Sequence[np.ndarray],
+    action_list: Sequence,
+    base_dir: Union[str, Path],
+    *,
+    csv_name: Optional[str] = None,
+) -> None:
+    """
+    Save a batch of observations and corresponding actions to disk.
+
+    Parameters
+    ----------
+    obs_list : Sequence[np.ndarray]
+        Sequence of H×W×3 RGB arrays.
+    action_list : Sequence
+        Sequence of array-like or scalar actions.
+    base_dir : Union[str, Path]
+        Base directory for saving images and actions.
+    csv_name : Optional[str], optional
+        Name of the CSV file for actions, by default None.
+
+    Returns
+    -------
+    None
+    """
+    base = Path(base_dir)
+    img_dir = base / "images"
+    act_dir = base / "actions"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    act_dir.mkdir(parents=True, exist_ok=True)
+
+    stem_base = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+    image_paths: List[str] = []
+
+    for idx, obs in enumerate(obs_list, start=1):
+        if np.issubdtype(obs.dtype, np.floating):
+            obs = (obs * 255).clip(0, 255).astype(np.uint8)
+
+        if obs.ndim != 3 or obs.shape[2] != 3:
+            raise ValueError(f"Expected H×W×3 array for obs #{idx}, got shape {obs.shape}")
+
+        stem = f"{stem_base}_{idx:03d}"
+        img_path = img_dir / f"{stem}.png"
+        Image.fromarray(obs).save(img_path)
+        image_paths.append(str(img_path))
+
+    flat_actions = []
+    for action in action_list:
+        arr = np.atleast_1d(action).reshape(-1)
+        flat_actions.append(arr)
+    lengths = [a.size for a in flat_actions]
+    if len(set(lengths)) != 1:
+        raise ValueError(f"All actions must have the same size; got sizes {set(lengths)}")
+    action_matrix = np.vstack(flat_actions)
+
+    if csv_name is None:
+        action_csv = act_dir / f"{stem_base}_actions.csv"
+        mode = "wb"
+    else:
+        action_csv = act_dir / csv_name
+        mode = "ab" if action_csv.exists() else "wb"
+
+    with open(action_csv, mode) as fh:
+        np.savetxt(fh, action_matrix, delimiter=",", fmt="%s")
