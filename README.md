@@ -43,6 +43,9 @@ To install the required dependencies, create a Python virtual environment and ru
 
 ```bash
 pip install -r requirements.txt
+cd Miniworld
+pip install -e .
+cd ..
 ```
 
 After installation you can launch dataset collection with:

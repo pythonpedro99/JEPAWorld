@@ -1,0 +1,7 @@
+numpy>=1.22.0
+pyglet<2.0,>=1.5.27
+gymnasium>=0.29.1
+
+[testing]
+pytest>=7.0.1
+torch
