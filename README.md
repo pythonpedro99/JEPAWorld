@@ -13,3 +13,6 @@ pip freeze > ../requirements.txt
 (4) Miniworld/scripts/manual_control.py --env-name MiniWorld-PickupObjects-v0
 (5) Miniworld/scripts/manual_control.py --env-name MiniWorld-ThreeRooms-v0
 (6) Miniworld/scripts/manual_control.py --env-name MiniWorld-WallGap-v0  
+
+
+export PYOPENGL_PLATFORM=osmesa

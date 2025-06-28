@@ -1,3 +1,5 @@
+import time
+import gc
 import os
 import json
 import random
@@ -5,7 +7,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
-
 import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,21 +15,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from policies.rearrange import HumanLikeRearrangePolicy
 
-
-
 def _register_environment(env_id: str) -> None:
-    """
-    Register the MiniWorld JEPAENV environment.
-
-    Parameters
-    ----------
-    env_id : str
-        Identifier for the environment to register.
-
-    Returns
-    -------
-    None
-    """
     register(
         id=env_id,
         entry_point="miniworld.envs.jeparoom:JEPAENV",
@@ -38,35 +25,6 @@ def _register_environment(env_id: str) -> None:
 
 
 class CollectTrajectories:
-    """
-    Collect trajectories from a MiniWorld environment using a human-like rearrangement policy.
-
-    Attributes
-    ----------
-    env_id : str
-        Gym environment identifier.
-    n_samples : int
-        Number of samples to collect.
-    save_images : bool
-        Flag to save observations as image files.
-    output_dir : str
-        Directory to save collected data.
-    master_seed : int
-        Random seed for reproducibility.
-    rng : np.random.Generator
-        NumPy random number generator.
-    actions : List[int]
-        Recorded actions from all trajectories.
-    obs_shape : Tuple[int, int, int]
-        Shape of observation images (height, width, channels).
-    max_samples : int
-        Maximum buffer size for observations.
-    obs_memmap : Optional[np.memmap]
-        Memory-mapped array for storing observations when save_images is False.
-    metadata : Dict[str, Any]
-        Metadata for collected episodes.
-    """
-
     def __init__(
         self,
         env_id: str = "JEPAENV-v0",
@@ -74,26 +32,7 @@ class CollectTrajectories:
         save_images: bool = False,
         output_dir: str = "./saved_data"
     ) -> None:
-        """
-        Initialize trajectory collection parameters and start the collection loop.
-
-        Parameters
-        ----------
-        env_id : str, optional
-            Gym environment identifier, by default "JEPAENV-v0".
-        n_samples : int, optional
-            Number of samples to collect, by default 1000.
-        save_images : bool, optional
-            Whether to save observations as image files, by default False.
-        output_dir : str, optional
-            Directory to save actions, observations, and metadata, by default "./saved_data".
-
-        Returns
-        -------
-        None
-        """
         self.env_id = env_id
-        self.n_samples = n_samples
         self.save_images = save_images
         self.output_dir = output_dir
 
@@ -105,32 +44,52 @@ class CollectTrajectories:
             os.makedirs(os.path.join(self.output_dir, "images"), exist_ok=True)
 
         self.actions: List[int] = []
-        self.obs_shape: Tuple[int, int, int] = (128, 224, 3)
-        self.max_samples = self.n_samples + 200
+        self.obs_shape: Tuple[int, int, int] = (120, 160, 3)
         self.obs_memmap: Optional[np.memmap] = None
+
+        actions_path = os.path.join(self.output_dir, "actions.npy")
+        metadata_path = os.path.join(self.output_dir, "metadata.json")
+        obs_path = os.path.join(self.output_dir, "obs_trimmed.dat")
+
+        self.offset = 0
+        if os.path.exists(obs_path):
+            obs_size = np.prod(self.obs_shape)
+            statinfo = os.stat(obs_path)
+            self.offset = statinfo.st_size // (obs_size * np.dtype(np.uint8).itemsize)
+            print(f"Resuming from {self.offset} existing observations.")
+
+        self.total = self.offset
+        self.n_samples_new = n_samples
+        self.n_samples_total = self.total + self.n_samples_new
+        self.max_samples = self.n_samples_total + 200
 
         if not self.save_images:
             self.obs_memmap = np.memmap(
-                os.path.join(self.output_dir, "obs.dat"),
+                obs_path,
                 dtype=np.uint8,
-                mode='w+',
+                mode='r+' if os.path.exists(obs_path) else 'w+',
                 shape=(self.max_samples, *self.obs_shape)
             )
 
-        self.metadata: Dict[str, Any] = {
-            "env_id": self.env_id,
-            "master_seed": self.master_seed,
-            "n_samples": self.n_samples,
-            "episodes": []
-        }
+        if os.path.exists(actions_path):
+            self.actions = np.load(actions_path).tolist()
+        if os.path.exists(metadata_path):
+            with open(metadata_path) as f:
+                self.metadata = json.load(f)
+        else:
+            self.metadata: Dict[str, Any] = {
+                "env_id": self.env_id,
+                "master_seed": self.master_seed,
+                "episodes": []
+            }
 
         self._collect_loop()
 
         np.save(
-            os.path.join(self.output_dir, "actions.npy"),
+            actions_path,
             np.array(self.actions, dtype=np.int32)
         )
-        with open(os.path.join(self.output_dir, "metadata.json"), "w") as f:
+        with open(metadata_path, "w") as f:
             json.dump(self.metadata, f, indent=2)
 
         if not self.save_images:
@@ -143,75 +102,65 @@ class CollectTrajectories:
             )
 
     def _collect_loop(self) -> None:
-        """
-        Execute environment episodes until the desired number of samples is collected.
+        episode_idx = len(self.metadata["episodes"])
+        ep_seed = 340 + episode_idx
 
-        Returns
-        -------
-        None
-        """
-        total = 0
-        episode_idx = 0
-        ep_seed = 0
-
-        while total < self.n_samples:
+        while self.total < self.n_samples_total:
             ep_seed += 1
             episode_idx += 1
+
             env = gym.make(
                 self.env_id,
                 seed=ep_seed,
-                obs_width=1420,
-                obs_height=580,
+                obs_width=160,
+                obs_height=120,
                 domain_rand=True
             )
-            policy = HumanLikeRearrangePolicy(env=env, seed=ep_seed)
-            success = policy.rearrange()
-            if not success:
-                print(f"Episode {episode_idx} failed; skipping.")
-                episode_idx -= 1
-                continue
 
-            actions = policy.actions
-            observations = policy.observations
+            try:
+                policy = HumanLikeRearrangePolicy(env=env, seed=ep_seed)
+                success = policy.rearrange()
+                if not success:
+                    print(f"Episode {episode_idx} failed; skipping.")
+                    episode_idx -= 1
+                    continue
 
-            self.metadata["episodes"].append({
-                "episode": episode_idx,
-                "seed": ep_seed,
-                "n_actions": len(actions),
-                "n_observations": len(observations)
-            })
+                actions = policy.actions
+                observations = policy.observations
 
-            for cmd, obs in zip(actions, observations):
-                if total >= self.max_samples:
-                    print("Maximum sample buffer reached.")
-                    return
+                self.metadata["episodes"].append({
+                    "episode": episode_idx,
+                    "seed": ep_seed,
+                    "n_actions": len(actions),
+                    "n_observations": len(observations)
+                })
 
-                self.actions.append(cmd)
-                if self.save_images:
-                    img_path = os.path.join(
-                        self.output_dir,
-                        "images",
-                        f"obs_{total+1:06d}.png"
-                    )
-                    plt.imsave(img_path, obs)
-                else:
-                    assert self.obs_memmap is not None
-                    self.obs_memmap[total] = obs.astype(np.uint8)
+                for cmd, obs in zip(actions, observations):
+                    if self.total >= self.max_samples:
+                        print("Maximum sample buffer reached.")
+                        return
 
-                total += 1
-                pct = total / self.n_samples * 100
-                print(f"Progress: {pct:.2f}% ({total}/{self.n_samples})", end='\r')
+                    self.actions.append(cmd)
+                    if self.save_images:
+                        img_path = os.path.join(
+                            self.output_dir,
+                            "images",
+                            f"obs_{self.total+1:06d}.png"
+                        )
+                        plt.imsave(img_path, obs)
+                    else:
+                        assert self.obs_memmap is not None
+                        self.obs_memmap[self.total] = obs.astype(np.uint8)
 
-        print(f"\nCollected: {total} samples in {episode_idx} episodes.")
+                    self.total += 1
+                    pct = (self.total - self.offset) / self.n_samples_new * 100
+                    print(f"Progress: {pct:.2f}% ({self.total - self.offset}/{self.n_samples_new})", end='\r')
+            finally:
+                env.close()
+
+        print(f"\nCollected: {self.n_samples_new} new samples (total: {self.total})")
 
     def _trim_memmap_file(self) -> None:
-        """
-        Trim the memory-mapped observation file to the exact number of samples collected.
-
-        Returns
-        -------
-        None
-        """
         if self.obs_memmap is not None:
             self.obs_memmap.flush()
             del self.obs_memmap
@@ -220,23 +169,13 @@ class CollectTrajectories:
         trimmed_memmap = np.memmap(
             trimmed_path,
             dtype=np.uint8,
-            mode='w+',
-            shape=(self.n_samples, *self.obs_shape)
+            mode='r+',
+            shape=(self.total, *self.obs_shape)
         )
-
-        original_memmap = np.memmap(
-            os.path.join(self.output_dir, "obs.dat"),
-            dtype=np.uint8,
-            mode='r',
-            shape=(self.max_samples, *self.obs_shape)
-        )
-        trimmed_memmap[:] = original_memmap[:self.n_samples]
         trimmed_memmap.flush()
         del trimmed_memmap
-        del original_memmap
-        os.remove(os.path.join(self.output_dir, "obs.dat"))
 
 
 if __name__ == "__main__":
     _register_environment("JEPAENV-v0")
-    CollectTrajectories(save_images=True, n_samples=1000)
+    CollectTrajectories(save_images=False, n_samples=7000)
