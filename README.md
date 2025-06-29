@@ -56,3 +56,5 @@ python scripts/collect_trajectories.py
 
 Additional options can be passed by editing the `CollectTrajectories` instantiation at the bottom of the
 script, e.g. adjusting `n_samples` or enabling `save_images`.
+
+On Mac OS we reccommnt n_samples <= 7000 and sample repeatetly. The script automatically dettects the last sedd and episode and adds the data to the fiel. 
