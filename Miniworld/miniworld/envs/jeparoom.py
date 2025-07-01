@@ -6,7 +6,7 @@ from miniworld.miniworld import MiniWorldEnv
 from miniworld.entity import TextFrame
 import math
 import numpy as np 
-
+import string
 
 class JEPAENV(MiniWorldEnv, utils.EzPickle):
     """
@@ -117,24 +117,25 @@ class JEPAENV(MiniWorldEnv, utils.EzPickle):
             # Place into the world at that exact pose
             self.place_entity(entity, pos=(x, 0,z), dir=yaw)
 
-        # After room creation and agent placement
-        frame_height = 1.0
-        frame_depth = 0.75
-        text_y = 1.2  # vertical placement on the wall
+            def rand_label():
+                return ''.join(random.choices(string.ascii_uppercase, k=random.randint(1, 5)))
 
-        wall_labels = [
-    ("North", (self.size_a / 2, text_y, self.size_b - 0.05), math.pi / 2),    # Blick +x
-    ("South", (self.size_a / 2, text_y, 0.05), -math.pi / 2),               # Blick -x
-    ("West",  (0.05, text_y, self.size_b / 2), 0),                          # Blick +z
-    ("East",  (self.size_a - 0.05, text_y, self.size_b / 2), -math.pi),       # Blick -z
-]
+            # After room creation and agent placement
+            frame_height = 1.0
+            frame_depth = 0.75
+            text_y = 1.2  # vertical placement on the wall
 
+            wall_labels = [
+                (rand_label(), (self.size_a / 2, text_y, self.size_b - 0.05), math.pi / 2),     # +x
+                (rand_label(), (self.size_a / 2, text_y, 0.05), -math.pi / 2),                  # -x
+                (rand_label(), (0.05, text_y, self.size_b / 2), 0),                             # +z
+                (rand_label(), (self.size_a - 0.05, text_y, self.size_b / 2), -math.pi),        # -z
+            ]
 
-
-        for label, pos, dir_angle in wall_labels:
-            frame = TextFrame(pos=pos, dir=dir_angle, str=label, height=frame_height, depth=frame_depth)
-            frame.randomize(self.params, self.np_rng)  # or just: frame.randomize(None, self.rng)
-            self.entities.append(frame)
+            for label, pos, dir_angle in wall_labels:
+                frame = TextFrame(pos=pos, dir=dir_angle, str=label, height=frame_height, depth=frame_depth)
+                frame.randomize(self.params, self.np_rng)
+                self.entities.append(frame)
 
 
     
