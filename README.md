@@ -60,7 +60,7 @@ script, e.g. adjusting `n_samples` or enabling `save_images`.
 
 On macOS, we recommend setting n_samples <= 7000 per run due to memory constraints. You can run the script repeatedly — it will automatically detect the last used seed and episode, and append new data to the existing file. 
 
-## Inspecting the env in manual control mode via the keyboard 
+## Inspect the env in manual control mode via the keyboard 
 
 ```bash
 source .venv/bin/activate  
