@@ -42,6 +42,11 @@ output directory for images or memmap files.
 To install the required dependencies, create a Python virtual environment and run:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate  
+```
+then
+```bash
 pip install -r requirements.txt
 cd Miniworld
 pip install -e .
