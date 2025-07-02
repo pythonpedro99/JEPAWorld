@@ -1,3 +1,6 @@
+import sys
+sys.path = [p for p in sys.path if "miniworld" not in p]
+
 import math
 
 import pyglet
