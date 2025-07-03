@@ -27,7 +27,7 @@ def _register_environment(env_id: str) -> None:
 class CollectTrajectories:
     def __init__(
         self,
-        env_id: str = "JEPAENV-v0",
+        env_id: str = "RearrangeOneRoom-v0",
         n_samples: int = 1000,
         save_images: bool = False,
         output_dir: str = "./saved_data"
@@ -177,5 +177,5 @@ class CollectTrajectories:
 
 
 if __name__ == "__main__":
-    _register_environment("JEPAENV-v0")
+    _register_environment("RearrangeOneRoom-v0")
     CollectTrajectories(save_images=True, n_samples=100)
