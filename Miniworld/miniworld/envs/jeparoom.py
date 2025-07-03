@@ -3,7 +3,7 @@ import random
 import colorsys
 from miniworld.entity import Box, Ball, Key, COLOR_NAMES
 from miniworld.miniworld import MiniWorldEnv
-from miniworld.entity import TextFrame
+from miniworld.entity import TextFrame, ImageFrame
 import math
 import numpy as np 
 import string
@@ -117,25 +117,60 @@ class JEPAENV(MiniWorldEnv, utils.EzPickle):
             # Place into the world at that exact pose
             self.place_entity(entity, pos=(x, 0,z), dir=yaw)
 
-            def rand_label():
-                return ''.join(random.choices(string.ascii_uppercase, k=random.randint(1, 5)))
+        
 
-            # After room creation and agent placement
-            frame_height = 1.0
-            frame_depth = 0.75
-            text_y = 1.2  # vertical placement on the wall
+        # ---------- helper using self.rng ----------
+        def rand_label():
+            # random length 1–5, then that many letters
+            length = self.rng.randint(1, 5)
+            return ''.join(self.rng.choices(string.ascii_uppercase, k=length))
 
-            wall_labels = [
-                (rand_label(), (self.size_a / 2, text_y, self.size_b - 0.05), math.pi / 2),     # +x
-                (rand_label(), (self.size_a / 2, text_y, 0.05), -math.pi / 2),                  # -x
-                (rand_label(), (0.05, text_y, self.size_b / 2), 0),                             # +z
-                (rand_label(), (self.size_a - 0.05, text_y, self.size_b / 2), -math.pi),        # -z
-            ]
+        # -------- geometry constants --------
+        TEXT_HEIGHT, TEXT_DEPTH, TEXT_Y = 1.0, 0.75, 1.20
+        PIC_WIDTH, PIC_Y                 = 1.8, 1.35
 
-            for label, pos, dir_angle in wall_labels:
-                frame = TextFrame(pos=pos, dir=dir_angle, str=label, height=frame_height, depth=frame_depth)
-                frame.randomize(self.params, self.np_rng)
-                self.entities.append(frame)
+        # -------- wall specs (clockwise) --------
+        walls_all = [
+            (( self.size_a/2 , TEXT_Y ,  self.size_b-0.05),  math.pi/2 ),  # +X
+            (( self.size_a/2 , TEXT_Y ,  0.05            ), -math.pi/2 ),  # –X
+            (( 0.05          , TEXT_Y ,  self.size_b/2   ),  0         ),  # +Z
+            (( self.size_a-0.05, TEXT_Y , self.size_b/2 ), -math.pi    ),  # –Z
+        ]
+
+        # ---- pick two unique walls for pictures ----
+        picture_walls = set(self.rng.sample(range(len(walls_all)), k=2))
+
+        # ---- texture names (base names only) ----
+        pictures = ["alessandro_allori",
+                    "edmund_blair_leighton",
+                    "logo_mila"]
+
+        # ----- create exactly one frame per wall -----
+        for idx, (base_pos, dir_ang) in enumerate(walls_all):
+            if idx in picture_walls:
+                # bump Y for the larger image
+                pos = (base_pos[0], PIC_Y, base_pos[2])
+                tex = self.rng.choice(pictures)
+                ent = ImageFrame(
+                    pos=pos,
+                    dir=dir_ang,
+                    width=PIC_WIDTH,
+                    tex_name=tex
+                )
+            else:
+                ent = TextFrame(
+                    pos=base_pos,
+                    dir=dir_ang,
+                    str=rand_label(),
+                    height=TEXT_HEIGHT,
+                    depth=TEXT_DEPTH
+                )
+
+            # optional domain randomisation
+            # ent.randomize(self.params, self.np_rng)
+
+            self.entities.append(ent)
+
 
 
     
