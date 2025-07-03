@@ -69,5 +69,5 @@ On macOS, we recommend setting n_samples <= 7000 per run due to memory constrain
 
 ```bash
 source .venv/bin/activate  
-python Miniworld/miniworld/manual_control.py --env-name JEPAENV-v0
+python Miniworld/scripts/manual_control.py --env-name JEPAENV-v0 --domain-rand
 ```
