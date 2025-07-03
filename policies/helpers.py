@@ -238,7 +238,7 @@ def build_prm_graph_single_room(
 
 
 def plot_room_with_obstacles_and_path(
-    room_polygon: Polygon,
+    room: Room,
     obstacles: List[Obstacle],
     node_positions: Dict[str, Tuple[float, float]],
     graph: nx.Graph,
@@ -251,8 +251,8 @@ def plot_room_with_obstacles_and_path(
 
     Parameters
     ----------
-    room_polygon : Polygon
-        Shapely polygon of the room.
+    room : Room
+        Dataclass instance containing .vertices for the room polygon.
     obstacles : List[Obstacle]
         List of obstacles in the environment.
     node_positions : Dict[str, Tuple[float, float]]
@@ -265,16 +265,14 @@ def plot_room_with_obstacles_and_path(
         Radius for inflating obstacles, by default 0.25.
     title : str, optional
         Title for the plot, by default "Room with Obstacles and Path".
-
-    Returns
-    -------
-    None
     """
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.set_aspect("equal")
     ax.set_title(title)
 
-    rx, ry = room_polygon.exterior.xy
+    # build the polygon from the Room dataclass
+    room_poly = Polygon(room.vertices)
+    rx, ry = room_poly.exterior.xy
     ax.plot(rx, ry, color="black", linewidth=2, label="Room")
 
     for obs in obstacles:

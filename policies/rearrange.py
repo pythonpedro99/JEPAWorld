@@ -3,7 +3,7 @@ from typing import List, Tuple, Union
 import numpy as np
 import gymnasium as gym
 import networkx as nx
-from policies.helpers import build_prm_graph_single_room, get_graph_data, Room
+from policies.helpers import build_prm_graph_single_room, get_graph_data, Room, plot_room_with_obstacles_and_path
 from shapely.geometry import Point, Polygon
 
 
@@ -269,6 +269,15 @@ class HumanLikeRearrangePolicy:
             )
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             return False
+        
+        # plot_room_with_obstacles_and_path(
+        #     self.graph_data.room,
+        #     self.graph_data.obstacles,
+        #     self.node_pos2d,
+        #     self.prm_graph,
+        #     self.path,
+        #     title="",
+        # )
 
         waypoints = [self.node_pos2d[n] for n in self.path]
 
