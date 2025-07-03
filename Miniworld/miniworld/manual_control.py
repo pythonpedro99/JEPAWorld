@@ -10,8 +10,8 @@ from gymnasium.envs.registration import register
 import numpy as np
 
 register(
-    id="JEPAENV-v0",                      # your chosen Gym ID
-    entry_point="miniworld.envs.jeparoom:JEPAENV",        # module path and class name
+    id="RearrangeOneRoom-v0",                      # your chosen Gym ID
+    entry_point="miniworld.envs.jeparoom:RearrangeOneRoom",        # module path and class name
     kwargs={
         "size": 12,                        # default size (optional)
         "seed": 734 #np.random.randint(0, 2**31 - 1),                        # default seed (optional)

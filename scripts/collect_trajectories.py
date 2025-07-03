@@ -18,7 +18,7 @@ from policies.rearrange import HumanLikeRearrangePolicy
 def _register_environment(env_id: str) -> None:
     register(
         id=env_id,
-        entry_point="miniworld.envs.jeparoom:JEPAENV",
+        entry_point="miniworld.envs.jeparoom:RearrangeOneRoom",
         kwargs={"size": 12, "seed": random.randint(0, 2**31 - 1)},
         max_episode_steps=500,
     )
