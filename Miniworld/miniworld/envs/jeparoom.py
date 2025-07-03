@@ -8,7 +8,7 @@ import math
 import numpy as np 
 import string
 
-class JEPAENV(MiniWorldEnv, utils.EzPickle):
+class RearrangeOneRoom(MiniWorldEnv, utils.EzPickle):
     """
     ## Description
 

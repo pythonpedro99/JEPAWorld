@@ -3,19 +3,19 @@
 This repository contains a simple MiniWorld environment along with helper utilities and a policy for collecting
 trajectories. The most relevant code can be found in the following files:
 
-- `Miniworld/miniworld/envs/jeparoom.py` – defines the `JEPAENV` environment used for data collection.
+- `Miniworld/miniworld/envs/jeparoom.py` – defines the `RearrangeOneRoom-v0` environment used for data collection.
 - `policies/helpers.py` – helper dataclasses and functions for constructing a PRM and saving datasets.
 - `policies/rearrange.py` – contains `HumanLikeRearrangePolicy` used to generate actions.
 - `scripts/collect_trajectories.py` – script that instantiates the environment and policy to record trajectories.
 
 ## Environment
 
-The environment is implemented in `Miniworld/miniworld/envs/jeparoom.py`. The file defines a `JEPAENV` class
+The environment is implemented in `Miniworld/miniworld/envs/jeparoom.py`. The file defines a `RearrangeOneRoom-v0` class
 which inherits from `MiniWorldEnv` and creates a single rectangular room with randomised colours and
 objects:
 
 ```python
-class JEPAENV(MiniWorldEnv, utils.EzPickle):
+class RearrangeOneRoom-v0(MiniWorldEnv, utils.EzPickle):
     """
     Single-room environment with randomized wall, floor, ceiling colors,
     and randomly placed objects (balls, boxes, keys) that are visually distinguishable.
@@ -69,5 +69,5 @@ On macOS, we recommend setting n_samples <= 7000 per run due to memory constrain
 
 ```bash
 source .venv/bin/activate  
-python Miniworld/scripts/manual_control.py --env-name JEPAENV-v0 --domain-rand
+python Miniworld/scripts/manual_control.py --env-name RearrangeOneRoom-v0 --domain-rand
 ```
