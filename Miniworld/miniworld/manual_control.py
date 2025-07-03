@@ -1,6 +1,7 @@
 import sys
 sys.path = [p for p in sys.path if "miniworld" not in p]
 
+
 import math
 
 import pyglet
@@ -18,8 +19,6 @@ register(
     max_episode_steps=500,                 # match your env’s timeframe
 )
 
-
-
 class ManualControl:
     def __init__(self, env, no_time_limit: bool, domain_rand: bool):
         self.env = env.unwrapped
@@ -28,7 +27,7 @@ class ManualControl:
             self.env.max_episode_steps = math.inf
         if domain_rand:
             self.env.domain_rand = True
-
+            
     def run(self):
         print("============")
         print("Instructions")
