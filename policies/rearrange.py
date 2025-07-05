@@ -136,13 +136,13 @@ class HumanLikeRearrangePolicy:
         min_z, max_z = min(zs), max(zs)
 
         inner_rect = Polygon([
-            (min_x + 1.0, min_z + 4.2),
-            (max_x - 1.0, min_z + 4.2),
+            (min_x + 1.0, min_z + 3.2),
+            (max_x - 1.0, min_z + 3.2),
             (max_x - 1.0, max_z - 2.5),
             (min_x + 1.0, max_z - 2.5),
         ])
 
-        DIST_T: float = 1.5
+        DIST_T: float = 2.0
         target0_pos = np.array(self.node_pos2d[targets[0]])
 
         filtered_sample_nodes = [
