@@ -20,7 +20,7 @@ def _register_environment(env_id: str) -> None:
         id=env_id,
         entry_point="miniworld.envs.jeparoom:RearrangeOneRoom",
         kwargs={"size": 12, "seed": random.randint(0, 2**31 - 1)},
-        max_episode_steps=500,
+        max_episode_steps=250,
     )
 
 
@@ -44,7 +44,7 @@ class CollectTrajectories:
             os.makedirs(os.path.join(self.output_dir, "images"), exist_ok=True)
 
         self.actions: List[int] = []
-        self.obs_shape: Tuple[int, int, int] = (120, 160, 3)
+        self.obs_shape: Tuple[int, int, int] = (224, 224, 3)
         self.obs_memmap: Optional[np.memmap] = None
 
         actions_path = os.path.join(self.output_dir, "actions.npy")
@@ -112,8 +112,8 @@ class CollectTrajectories:
             env = gym.make(
                 self.env_id,
                 seed=ep_seed,
-                obs_width=160,
-                obs_height=120,
+                obs_width=224,
+                obs_height=224,
                 domain_rand=True
             )
 
@@ -178,4 +178,4 @@ class CollectTrajectories:
 
 if __name__ == "__main__":
     _register_environment("RearrangeOneRoom-v0")
-    CollectTrajectories(save_images=True, n_samples=100)
+    CollectTrajectories(save_images=True, n_samples=1000)
