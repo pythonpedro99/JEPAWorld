@@ -2,6 +2,7 @@ import math
 from ctypes import POINTER
 from enum import IntEnum
 from typing import Optional, Tuple
+import os
 
 import gymnasium as gym
 import numpy as np
@@ -681,8 +682,12 @@ class MiniWorldEnv(gym.Env):
         # Window for displaying the environment to humans
         self.window = None
 
-        # Invisible window to render into (shadow OpenGL context)
-        self.shadow_window = pyglet.window.Window(width=1, height=1, visible=False)
+        # ADAPTED: changed to fix the pyglet NoneTypeError on MacOS old line: self.shadow_window = pyglet.window.Window(width=1, height=1, visible=False)
+        if os.environ.get("PYGLET_HEADLESS", "").lower() != "true":
+            self.shadow_window = pyglet.window.Window(width=1, height=1, visible=False)
+        else:
+            self.shadow_window = None
+
 
         # Enable depth testing and backface culling
         glEnable(GL_DEPTH_TEST)
@@ -1367,7 +1372,10 @@ class MiniWorldEnv(gym.Env):
 
         # Switch to the default OpenGL context
         # This is necessary on Linux Nvidia drivers
-        self.shadow_window.switch_to()
+        # ADAPTED: changed to fix the pyglet NoneTypeError on MacOS old line: self.shadow_window.switch_to()
+        if self.shadow_window is not None:
+           self.shadow_window.switch_to()
+
 
         # Bind the frame buffer before rendering into it
         frame_buffer.bind()

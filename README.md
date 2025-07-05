@@ -53,7 +53,7 @@ pip install -e .
 cd ..
 ```
 
-After installation you can launch dataset collection with:
+After installation set the output_dir in collect_trajecoties.py and launch dataset collection with:
 
 ```bash
 source .venv/bin/activate  
@@ -63,7 +63,6 @@ python scripts/collect_trajectories.py
 Additional options can be passed by editing the `CollectTrajectories` instantiation at the bottom of the
 script, e.g. adjusting `n_samples` or enabling `save_images`.
 
-On macOS, we recommend setting n_samples <= 7000 per run due to memory constraints. You can run the script repeatedly — it will automatically detect the last used seed and episode, and append new data to the existing file. 
 
 ## Inspect the env in manual control mode via the keyboard 
 

@@ -1,6 +1,8 @@
-import time
-import gc
 import os
+import pyglet
+os.environ['PYGLET_HEADLESS'] = 'True'
+# pyglet.options['headless'] = True
+# pyglet.options['shadow_window'] = False
 import json
 import random
 import sys
@@ -12,13 +14,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from gymnasium.envs.registration import register
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 from policies.rearrange import HumanLikeRearrangePolicy
+
+from Miniworld.miniworld.envs.jeparoom import RearrangeOneRoom
 
 def _register_environment(env_id: str) -> None:
     register(
         id=env_id,
-        entry_point="miniworld.envs.jeparoom:RearrangeOneRoom",
+        entry_point=RearrangeOneRoom,  # ✅ pass class directly
         kwargs={"size": 12, "seed": random.randint(0, 2**31 - 1)},
         max_episode_steps=250,
     )
@@ -30,7 +33,7 @@ class CollectTrajectories:
         env_id: str = "RearrangeOneRoom-v0",
         n_samples: int = 1000,
         save_images: bool = False,
-        output_dir: str = "./saved_data"
+        output_dir: str = "/Users/julianquast/Documents/Bachelor Thesis/Datasets/rearrange_1k"
     ) -> None:
         self.env_id = env_id
         self.save_images = save_images
@@ -178,4 +181,4 @@ class CollectTrajectories:
 
 if __name__ == "__main__":
     _register_environment("RearrangeOneRoom-v0")
-    CollectTrajectories(save_images=True, n_samples=1000)
+    CollectTrajectories(save_images=False, n_samples=150000)
