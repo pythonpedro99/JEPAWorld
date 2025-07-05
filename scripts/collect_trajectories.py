@@ -181,4 +181,4 @@ class CollectTrajectories:
 
 if __name__ == "__main__":
     _register_environment("RearrangeOneRoom-v0")
-    CollectTrajectories(save_images=False, n_samples=150000)
+    CollectTrajectories(save_images=False, n_samples=50000)
