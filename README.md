@@ -6,6 +6,7 @@ This repository contains the **MiniWorld-based `RearrangeOneRoom` environment** 
 - `policies/helpers.py` – helper dataclasses and functions for constructing a PRM and saving datasets.
 - `policies/rearrange.py` – contains `HumanLikeRearrangePolicy` used to generate actions.
 - `scripts/collect_trajectories.py` – script that instantiates the environment and policy to record trajectories.
+- `notebooks/01_data_inspection.ipynb` - jupyter notebook for data inspection, sanity checks and training preparation.
 
 ---
 
