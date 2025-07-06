@@ -23,9 +23,8 @@ class RearrangeOneRoom-v0(MiniWorldEnv, utils.EzPickle):
 
 The `_gen_world()` method uses `add_rect_room` to build the layout and place objects. Example visuals:
 
-- ![Room layout](https://example.com/image1.png)
-- ![Object placement](https://example.com/image2.png)
-- ![Agent view](https://example.com/image3.png)
+![RearrangeOneRoom](assets/trajectory_expert_short.jpg)
+
 
 ---
 
