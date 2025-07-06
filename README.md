@@ -63,7 +63,7 @@ python scripts/collect_trajectories.py
 Additional options can be passed by editing the `CollectTrajectories` instantiation at the bottom of the
 script, e.g. adjusting `n_samples` or enabling `save_images`.
 
-On macOS, we recommend setting n_samples <= 50000 per run due to memory constraints. You can run the script repeatedly — it will automatically detect the last used seed and episode, and append new data to the existing file. 
+On macOS, we recommend setting n_samples <= 40000 per run due to memory constraints. You can run the script repeatedly — it will automatically detect the last used seed and episode, and append new data to the existing file. 
 
 ## Inspect the env in manual control mode via the keyboard 
 
