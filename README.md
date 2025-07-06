@@ -1,18 +1,17 @@
 # JEPAWorld Usage Guide
 
-This repository contains a simple MiniWorld environment along with helper utilities and a policy for collecting
-trajectories. The most relevant code can be found in the following files:
+This repository contains the **MiniWorld-based `RearrangeOneRoom` environment** along with helper utilities and a policy for collecting trajectories. The most relevant code can be found in:
 
 - `Miniworld/miniworld/envs/jeparoom.py` – defines the `RearrangeOneRoom-v0` environment used for data collection.
 - `policies/helpers.py` – helper dataclasses and functions for constructing a PRM and saving datasets.
 - `policies/rearrange.py` – contains `HumanLikeRearrangePolicy` used to generate actions.
 - `scripts/collect_trajectories.py` – script that instantiates the environment and policy to record trajectories.
 
+---
+
 ## Environment
 
-The environment is implemented in `Miniworld/miniworld/envs/jeparoom.py`. The file defines a `RearrangeOneRoom-v0` class
-which inherits from `MiniWorldEnv` and creates a single rectangular room with randomised colours and
-objects:
+The environment is implemented in `Miniworld/miniworld/envs/jeparoom.py`, where the class `RearrangeOneRoom-v0` inherits from `MiniWorldEnv`. It creates a single rectangular room with randomized elements:
 
 ```python
 class RearrangeOneRoom-v0(MiniWorldEnv, utils.EzPickle):
@@ -22,52 +21,74 @@ class RearrangeOneRoom-v0(MiniWorldEnv, utils.EzPickle):
     """
 ```
 
-The `_gen_world` method constructs the room and places entities using `add_rect_room`.
+The `_gen_world()` method uses `add_rect_room` to build the layout and place objects. Example visuals:
+
+- ![Room layout](https://example.com/image1.png)
+- ![Object placement](https://example.com/image2.png)
+- ![Agent view](https://example.com/image3.png)
+
+---
 
 ## Helpers and Policy
 
-`policies/helpers.py` defines lightweight dataclasses (`Room`, `Obstacle`, `GraphData`) and utilities such as
-`get_graph_data` and `build_prm_graph_single_room` to build a PRM for navigation. It also provides
-`save_data_batch` for writing observations and actions to disk.
+The file `policies/helpers.py` defines lightweight dataclasses:
 
-The policy located in `policies/rearrange.py` is `HumanLikeRearrangePolicy`. It uses the helper functions to
-plan and execute a sequence of pick-and-place actions inside the room.
+- `Room`, `Obstacle`, `GraphData`
+- Functions like `get_graph_data` and `build_prm_graph_single_room` to construct Probabilistic Roadmaps (PRMs)
+- Utility `save_data_batch` to store collected observations and actions
+
+The core policy in `policies/rearrange.py` is `HumanLikeRearrangePolicy`, which plans and performs a series of **pick-and-place** operations, relying on PRM-based path planning.
+
+---
 
 ## Collecting Trajectories
 
-The script `scripts/collect_trajectories.py` registers the environment and runs the policy to gather data. The
-`CollectTrajectories` class takes parameters such as the environment id, number of samples to collect and the
-output directory for images or memmap files.
+The trajectory collection is controlled by `scripts/collect_trajectories.py`, where the `CollectTrajectories` class allows you to define:
 
-To install the required dependencies, create a Python virtual environment and run:
+- `env_id`
+- `n_samples` (number of samples)
+- `output_dir` (memmap or image dump)
+
+**Installation Steps**:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate  
-```
-then
-```bash
 pip install -r requirements.txt
 cd Miniworld
 pip install -e .
 cd ..
 ```
 
-After installation set the output_dir in collect_trajecoties.py and launch dataset collection with:
+**Start data collection** by setting the output directory in `collect_trajectories.py`, then:
 
 ```bash
 source .venv/bin/activate  
 python scripts/collect_trajectories.py
 ```
 
-Additional options can be passed by editing the `CollectTrajectories` instantiation at the bottom of the
-script, e.g. adjusting `n_samples` or enabling `save_images`.
+Customize trajectory collection by editing the `CollectTrajectories` instantiation (e.g., `n_samples`, `save_images`, etc.).
 
-On macOS, we recommend setting n_samples <= 40000 per run due to memory constraints. You can run the script repeatedly — it will automatically detect the last used seed and episode, and append new data to the existing file. 
+> 💡 On **macOS**, set `n_samples <= 40000` per run to avoid memory issues. The script supports resumable collection — appending new episodes automatically.
 
-## Inspect the env in manual control mode via the keyboard 
+---
+
+## Manual Inspection (Keyboard Control)
+
+Use keyboard input to manually explore the environment:
 
 ```bash
 source .venv/bin/activate  
 python Miniworld/scripts/manual_control.py --env-name RearrangeOneRoom-v0 --domain-rand
 ```
+
+---
+
+## License and Contact
+
+This project is released under the **MIT License**.
+
+For questions, suggestions, or collaboration inquiries, please contact:
+
+📧 **Julian Quast**  
+`julian.quast@campus.tu-berlin.de`
