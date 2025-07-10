@@ -26,7 +26,11 @@ The `_gen_world()` method uses `add_rect_room` to build the layout and place obj
 
 ![RearrangeOneRoom](assets/trajectory_expert_short.jpg)
 
+---
 
+## Rearrange Datasets
+
+- The rearrange_1k dataset (20GiB) can be downloaded here: [rearrange_1k](https://drive.google.com/file/d/1bFiwR0jXowX9YP7Wk7H042glMMlRA7CJ/view?usp=sharing)
 ---
 
 ## Helpers and Policy
