@@ -14,7 +14,7 @@ register(
     entry_point="miniworld.envs.jeparoom:RearrangeOneRoom",        # module path and class name
     kwargs={
         "size": 12,                        # default size (optional)
-        "seed": 734 #np.random.randint(0, 2**31 - 1),                        # default seed (optional)
+        "seed": np.random.randint(0, 2**31 - 1),                        # default seed (optional)
     },
     max_episode_steps=500,                 # match your env’s timeframe
 )

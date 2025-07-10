@@ -35,7 +35,6 @@ The file `policies/helpers.py` defines lightweight dataclasses:
 
 - `Room`, `Obstacle`, `GraphData`
 - Functions like `get_graph_data` and `build_prm_graph_single_room` to construct Probabilistic Roadmaps (PRMs)
-- Utility `save_data_batch` to store collected observations and actions
 
 The core policy in `policies/rearrange.py` is `HumanLikeRearrangePolicy`, which plans and performs a series of **pick-and-place** operations, relying on PRM-based path planning.
 
@@ -45,9 +44,10 @@ The core policy in `policies/rearrange.py` is `HumanLikeRearrangePolicy`, which 
 
 The trajectory collection is controlled by `scripts/collect_trajectories.py`, where the `CollectTrajectories` class allows you to define:
 
-- `env_id`
-- `n_samples` (number of samples)
-- `output_dir` (memmap or image dump)
+- n_episodes,
+- save_images (saves Images insted of .npy)
+- overwrite (overrides existing episodes)
+- base_seed=0
 
 **Installation Steps**:
 
@@ -67,9 +67,9 @@ source .venv/bin/activate
 python scripts/collect_trajectories.py
 ```
 
-Customize trajectory collection by editing the `CollectTrajectories` instantiation (e.g., `n_samples`, `save_images`, etc.).
+Customize trajectory collection by editing the `CollectTrajectories` instantiation (e.g., `n_episodes`, `save_images`, etc.).
 
-> 💡 On **macOS**, set `n_samples <= 40000` per run to avoid memory issues. The script supports resumable collection — appending new episodes automatically.
+> 💡 On **macOS**, set `n_samples <= 40000` per run to avoid pyglet issues. The script supports resumable collection — appending new episodes automatically.
 
 ---
 

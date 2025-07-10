@@ -34,7 +34,7 @@ class CollectTrajectories:
         n_episodes: int = 1_000,
         save_images: bool = False,
         output_dir: str = (
-            "/Users/julianquast/Documents/Bachelor Thesis/Datasets/rearrange_1k"
+            "data/test_episodes"
         ),
         overwrite: bool = False,
         base_seed: int = 0,
@@ -155,8 +155,8 @@ class CollectTrajectories:
 if __name__ == "__main__":
     _register_environment("RearrangeOneRoom-v0")
     CollectTrajectories(
-        n_episodes=100,
-        save_images=False,
+        n_episodes=2,
+        save_images=True,
         overwrite=False,
         base_seed=0,
     )
