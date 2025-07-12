@@ -67,8 +67,20 @@ cd ..
 **Start data collection** by setting the output directory in `collect_trajectories.py`, then:
 
 ```bash
-source .venv/bin/activate  
-python scripts/collect_trajectories.py
+source .venv/bin/activate  python scripts/collect_trajectories.py \
+  --env_id RearrangeOneRoom-v0 \
+  --n_episodes 2000 \
+  --batch_size 30 \
+  --output_dir data/test_episodes \
+
+
+  python scripts/collect_trajectories.py \
+  --env_id RearrangeOneRoom-v0 \
+  --n_episodes 1000 \
+  --batch_size 30 \
+  --output_dir data/test_episodes \
+  --overwrite
+
 ```
 
 Customize trajectory collection by editing the `CollectTrajectories` instantiation (e.g., `n_episodes`, `save_images`, etc.).

@@ -1,8 +1,10 @@
 import os
+import sys
 import json
 import random
-import sys
 import shutil
+import subprocess
+import argparse
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -11,7 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from gymnasium.envs.registration import register
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Ensure your project root is on PYTHONPATH so imports work
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from policies.rearrange import HumanLikeRearrangePolicy
 from Miniworld.miniworld.envs.jeparoom import RearrangeOneRoom
 
@@ -30,16 +33,13 @@ class CollectTrajectories:
 
     def __init__(
         self,
-        env_id: str = "RearrangeOneRoom-v0",
-        n_episodes: int = 1_000,
-        save_images: bool = False,
-        output_dir: str = (
-            "data/test_episodes"
-        ),
-        overwrite: bool = False,
-        base_seed: int = 0,
+        env_id: str,
+        n_episodes: int,
+        save_images: bool,
+        output_dir: str,
+        overwrite: bool,
+        base_seed: int,
     ) -> None:
-
         self.env_id = env_id
         self.save_images = save_images
         self.output_dir = Path(output_dir)
@@ -65,7 +65,7 @@ class CollectTrajectories:
             }
             self._save_metadata()
 
-        # Determine starting counters
+        # Starting counters
         if self.metadata["episodes"]:
             last = self.metadata["episodes"][-1]
             self.episode_counter = last["episode"] + 1
@@ -74,89 +74,141 @@ class CollectTrajectories:
             self.episode_counter = 1
             self.seed_counter = base_seed
 
-        print(f"▶️  Starting at Episode {self.episode_counter}, Seed {self.seed_counter}")
+        print(f"▶️  Starting batch: episodes {self.episode_counter}→"
+              f"{self.episode_counter + n_episodes - 1}, seeds {self.seed_counter}→…")
 
-        # Collect trajectories
+        # Register and collect
+        _register_environment(self.env_id)
         self._collect_loop(n_episodes)
-
-        print(f"✅ Done. New episodes in {self.episodes_dir}")
+        print(f"✅ Batch complete. Episodes now up to {self.episode_counter - 1}")
 
     def _save_metadata(self) -> None:
-        """
-        Persist current metadata to disk.
-        """
         with open(self.metadata_path, "w") as f:
             json.dump(self.metadata, f, indent=2)
 
     def _collect_loop(self, n_episodes: int) -> None:
-        """Collect exactly n_episodes successful trajectories."""
-        success_count = 0
-        while success_count < n_episodes:
-            ep_num = self.episode_counter
-            ep_seed = self.seed_counter
-
-            ep_folder = self.episodes_dir / f"ep_{ep_num:04d}"
-            if ep_folder.exists():
-                raise RuntimeError(
-                    f"Episode folder {ep_folder} already exists. "
-                    "Use overwrite=True if you want to start fresh."
-                )
-
-            env = gym.make(
-                self.env_id,
-                seed=ep_seed,
-                obs_width=self.OBS_SHAPE[1],
-                obs_height=self.OBS_SHAPE[0],
-                domain_rand=True,
-            )
+        success = 0
+        while success < n_episodes:
+            ep = self.episode_counter
+            seed = self.seed_counter
 
             try:
-                policy = HumanLikeRearrangePolicy(env=env, seed=ep_seed)
-                if not policy.rearrange():
-                    print(f"Episode {ep_num:04d} failed, skipping.")
-                    self.seed_counter += 1
-                    continue
+                ep_folder = self.episodes_dir / f"ep_{ep:04d}"
+                if ep_folder.exists():
+                    raise RuntimeError(f"{ep_folder} already exists")
+
+                env = gym.make(
+                    self.env_id,
+                    seed=seed,
+                    obs_width=self.OBS_SHAPE[1],
+                    obs_height=self.OBS_SHAPE[0],
+                    domain_rand=True,
+                    render_mode="rgb_array",
+                )
+
+                policy = HumanLikeRearrangePolicy(env=env, seed=seed)
+                ok = policy.rearrange()
+                env.close()
+
+                if not ok:
+                    raise RuntimeError("Policy returned False")
 
                 actions = np.asarray(policy.actions, dtype=np.int32)
-                observations = np.asarray(policy.observations, dtype=np.uint8)
+                obs = np.asarray(policy.observations, dtype=np.uint8)
 
-                # Save episode data
                 ep_folder.mkdir()
                 np.save(ep_folder / "actions.npy", actions)
                 if self.save_images:
-                    for i, img in enumerate(observations):
+                    for i, img in enumerate(obs):
                         plt.imsave(ep_folder / f"obs_{i:04d}.png", img)
                 else:
-                    np.save(ep_folder / "obs.npy", observations)
+                    np.save(ep_folder / "obs.npy", obs)
 
-                # Append metadata
                 self.metadata["episodes"].append({
-                    "episode": ep_num,
-                    "seed": ep_seed,
+                    "episode": ep,
+                    "seed": seed,
                     "n_actions": int(actions.shape[0]),
-                    "n_observations": int(observations.shape[0]),
+                    "n_observations": int(obs.shape[0]),
                 })
-                # Persist metadata after each episode
                 self._save_metadata()
 
-                print(
-                    f"Ep {ep_num:04d} | acts {actions.shape[0]:3d} | "
-                    f"obs {observations.shape[0]:3d}"
-                )
-
-                # Increment counters on success
+                print(f"✅ Ep {ep:04d} | acts {actions.shape[0]:3d} | obs {obs.shape[0]:3d}")
+                success += 1
                 self.episode_counter += 1
                 self.seed_counter += 1
-                success_count += 1
-            finally:
-                env.close()
+
+            except Exception as e:
+                print(f"❌ Ep {ep:04d}, Seed {seed} failed: {e}")
+                # skip this one
+                self.seed_counter += 1
+
+            # finally:
+            #     # always advance both so we never repeat a bad seed or ep index
+            #     self.episode_counter += 1
+            #     self.seed_counter += 1
 
 
 if __name__ == "__main__":
-    _register_environment("RearrangeOneRoom-v0")
-    CollectTrajectories(
-        n_episodes=2,
-        save_images=True,
-        overwrite=False,
-        base_seed=0,
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--env_id", default="RearrangeOneRoom-v0")
+    parser.add_argument("--n_episodes", type=int, required=True,
+                        help="Number of episodes (or total if using --batch_size).")
+    parser.add_argument("--batch_size", type=int,
+                        help="If set, run in driver mode: spawn subprocesses collecting batches of this size until total is reached.")
+    parser.add_argument("--save_images", action="store_true")
+    parser.add_argument("--output_dir", default="data/test_episodes")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="Only applies to the very first batch (clears existing data).")
+    parser.add_argument("--base_seed", type=int, default=0)
+    args = parser.parse_args()
+
+    # Driver mode: spawn subprocesses in chunks of --batch_size
+    if args.batch_size:
+        total = args.n_episodes
+        batch = args.batch_size
+        collected = 0
+        current_seed = args.base_seed
+        first = True
+
+        # Ensure output dir & metadata are fresh if first batch
+        if args.overwrite and Path(args.output_dir).exists():
+            shutil.rmtree(args.output_dir)
+
+        while collected < total:
+            this_batch = min(batch, total - collected)
+            cmd = [
+                sys.executable, __file__,
+                "--env_id", args.env_id,
+                "--n_episodes", str(this_batch),
+                "--output_dir", args.output_dir,
+                "--base_seed", str(current_seed),
+            ]
+            if args.save_images:
+                cmd.append("--save_images")
+            if first and args.overwrite:
+                cmd.append("--overwrite")
+            print(f"▶️  Launching subprocess for {this_batch} eps from seed {current_seed}")
+            subprocess.run(cmd, check=True)
+            first = False
+
+            # Reload metadata to get how many we have and last seed
+            md_path = Path(args.output_dir) / "metadata.json"
+            with open(md_path) as f:
+                md = json.load(f)
+            collected = len(md["episodes"])
+            last_seed = md["episodes"][-1]["seed"]
+            current_seed = last_seed + 1
+            print(f"🔁 Collected {collected}/{total}, next seed {current_seed}")
+
+        print("✅ All done!")
+
+    else:
+        # Single-run mode: collect exactly n_episodes then exit
+        CollectTrajectories(
+            env_id=args.env_id,
+            n_episodes=args.n_episodes,
+            save_images=args.save_images,
+            output_dir=args.output_dir,
+            overwrite=args.overwrite,
+            base_seed=args.base_seed,
+        )

@@ -221,10 +221,10 @@ class HumanLikeRearrangePolicy:
             return False
 
         self.turn_towards((3.5, 10.0))
-        end_cmd: int = 7
-        obs, _, term, trunc, _ = self.env.step(end_cmd)
-        self.actions.append(end_cmd)
-        self.observations.append(obs)
+        # end_cmd: int = 7
+        # obs, _, term, trunc, _ = self.env.step(end_cmd)
+        # self.actions.append(end_cmd)
+        # self.observations.append(obs)
 
         return self.actions, self.observations
 
