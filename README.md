@@ -91,7 +91,7 @@ python scripts/collect_trajectories.py \
 
 Customize trajectory collection by editing the `CollectTrajectories` instantiation (e.g., `n_episodes`, `save_images`, etc.).
 
-> 💡 On **macOS**, set `n_samples <= 40000` per run to avoid pyglet issues. The script supports resumable collection — appending new episodes automatically.
+> 💡 On **macOS**, use driver mode and set `--batch_size <= 30` to avoid pyglet issues. The script supports resumable collection — appending new episodes automatically.
 
 ---
 
