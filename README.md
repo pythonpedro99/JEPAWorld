@@ -46,12 +46,16 @@ The core policy in `policies/rearrange.py` is `HumanLikeRearrangePolicy`, which 
 
 ## Collecting Trajectories
 
-The trajectory collection is controlled by `scripts/collect_trajectories.py`, where the `CollectTrajectories` class allows you to define:
+The trajectory collection is controlled by `scripts/collect_trajectories.py`, where the
+`CollectTrajectories` class exposes a few parameters:
 
-- n_episodes,
-- save_images (saves Images insted of .npy)
-- overwrite (overrides existing episodes)
-- base_seed=0
+- `env_id` – gym environment id (defaults to `RearrangeOneRoom-v0`)
+- `n_episodes` – number of episodes to record
+- `batch_size` – if supplied, run in *driver mode* that spawns subprocesses to
+  collect episodes in batches
+- `save_images` – store observations as PNG files instead of `obs.npy`
+- `overwrite` – remove any existing dataset when starting the first batch
+- `base_seed` – seed for the first episode (defaults to `0`)
 
 **Installation Steps**:
 
@@ -64,23 +68,25 @@ pip install -e .
 cd ..
 ```
 
-**Start data collection** by setting the output directory in `collect_trajectories.py`, then:
+**Start data collection** by activating the environment and running the
+`collect_trajectories.py` script. Below are examples for both single-run and
+driver modes.
 
 ```bash
-source .venv/bin/activate  python scripts/collect_trajectories.py \
-  --env_id RearrangeOneRoom-v0 \
-  --n_episodes 2000 \
-  --batch_size 30 \
-  --output_dir data/test_episodes \
-
-
-  python scripts/collect_trajectories.py \
+# single run collecting 1000 episodes
+source .venv/bin/activate
+python scripts/collect_trajectories.py \
   --env_id RearrangeOneRoom-v0 \
   --n_episodes 1000 \
-  --batch_size 30 \
   --output_dir data/test_episodes \
   --overwrite
 
+# driver mode: collect 2000 episodes in batches of 30
+python scripts/collect_trajectories.py \
+  --env_id RearrangeOneRoom-v0 \
+  --n_episodes 2000 \
+  --batch_size 30 \
+  --output_dir data/test_episodes
 ```
 
 Customize trajectory collection by editing the `CollectTrajectories` instantiation (e.g., `n_episodes`, `save_images`, etc.).
