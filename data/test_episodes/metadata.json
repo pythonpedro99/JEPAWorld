@@ -1,18 +1,5 @@
 {
   "env_id": "RearrangeOneRoom-v0",
-  "master_seed": 896321607,
-  "episodes": [
-    {
-      "episode": 1,
-      "seed": 1,
-      "n_actions": 146,
-      "n_observations": 147
-    },
-    {
-      "episode": 2,
-      "seed": 2,
-      "n_actions": 135,
-      "n_observations": 136
-    }
-  ]
+  "master_seed": 388180129,
+  "episodes": []
 }
