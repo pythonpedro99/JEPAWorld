@@ -121,7 +121,7 @@ class HumanLikeRearrangePolicy:
         Union[bool, Tuple[List[int], List[np.ndarray]]]
             False on failure, otherwise (actions, observations).
         '''
-        self.wiggle(2)
+        self.wiggle(6)
         object_nodes = [
             nid
             for nid in self.node_pos2d.keys()
@@ -219,6 +219,23 @@ class HumanLikeRearrangePolicy:
 
         if not self.go_to(closest_start_node):
             return False
+        
+        end_cmd: int = 2
+        obs, _, term, trunc, _ = self.env.step(end_cmd)
+        self.actions.append(end_cmd)
+        self.observations.append(obs)
+        obs, _, term, trunc, _ = self.env.step(end_cmd)
+        self.actions.append(end_cmd)
+        self.observations.append(obs)
+        obs, _, term, trunc, _ = self.env.step(end_cmd)
+        self.actions.append(end_cmd)
+        self.observations.append(obs)
+        obs, _, term, trunc, _ = self.env.step(end_cmd)
+        self.actions.append(end_cmd)
+        self.observations.append(obs)
+        obs, _, term, trunc, _ = self.env.step(end_cmd)
+        self.actions.append(end_cmd)
+        self.observations.append(obs)
 
         self.turn_towards((3.5, 10.0))
         # end_cmd: int = 7

@@ -73,15 +73,7 @@ cd ..
 driver modes.
 
 ```bash
-# single run collecting 1000 episodes
 source .venv/bin/activate
-python scripts/collect_trajectories.py \
-  --env_id RearrangeOneRoom-v0 \
-  --n_episodes 1000 \
-  --output_dir data/test_episodes \
-  --overwrite
-
-# driver mode: collect 2000 episodes in batches of 30
 python scripts/collect_trajectories.py \
   --env_id RearrangeOneRoom-v0 \
   --n_episodes 2000 \

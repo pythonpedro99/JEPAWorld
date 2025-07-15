@@ -88,8 +88,11 @@ class RearrangeOneRoom(MiniWorldEnv, utils.EzPickle):
         # Generate distinct entity colors (RGB) with contrast to background
         
 
-        min_x, max_x = 1.3, self.size_a - 1.3
-        min_z, max_z = 3.75, self.size_b - 2.5
+        # min_x, max_x = 1.3, self.size_a - 1.3
+        # min_z, max_z = 3.75, self.size_b - 2.5
+
+        min_x, max_x = 0.5, self.size_a - 0.5
+        min_z, max_z = 0.5, self.size_b - 0.5
 
         fixed_radius = 0.25
         min_sep = 2 * fixed_radius + 0.1  # 0.7 = no overlap + small buffer
