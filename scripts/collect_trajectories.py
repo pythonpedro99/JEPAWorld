@@ -87,65 +87,73 @@ class CollectTrajectories:
             json.dump(self.metadata, f, indent=2)
 
     def _collect_loop(self, n_episodes: int) -> None:
-        success = 0
-        while success < n_episodes:
-            ep = self.episode_counter
+        while self.episode_counter < self.episode_counter + n_episodes:
             seed = self.seed_counter
 
             try:
-                ep_folder = self.episodes_dir / f"ep_{ep:04d}"
-                if ep_folder.exists():
-                    raise RuntimeError(f"{ep_folder} already exists")
-
                 env = gym.make(
                     self.env_id,
                     seed=seed,
+                    max_entities = np.random.default_rng(seed).integers(1, 5),
                     obs_width=self.OBS_SHAPE[1],
                     obs_height=self.OBS_SHAPE[0],
                     domain_rand=True,
                     render_mode="rgb_array",
                 )
 
-                policy = HumanLikeRearrangePolicy(env=env, seed=seed)
-                ok = policy.rearrange()
+                # Probe env for objects
+                probe_policy = HumanLikeRearrangePolicy(env=env, seed=seed,target=[])
+                object_nodes = [
+                    nid for nid in probe_policy.node_pos2d
+                    if any(str(nid).startswith(pref) for pref in ("Box", "Ball", "Key"))
+                ]
+
+                for i, obj_id in enumerate(object_nodes):
+                    # Reset and run policy for each object
+                    obs, _ = env.reset(seed=seed)
+                    policy = HumanLikeRearrangePolicy(env=env, seed=seed, target=[obj_id])
+                    ok = policy.rearrange()
+                    if not ok:
+                        print(f"❌ Skipped {obj_id} in Seed {seed}")
+                        continue
+
+                    # Prepare folder
+                    ep = self.episode_counter
+                    ep_folder = self.episodes_dir / f"ep_{ep:04d}"
+                    if ep_folder.exists():
+                        raise RuntimeError(f"{ep_folder} already exists")
+                    ep_folder.mkdir()
+
+                    # Save results
+                    actions = np.asarray(policy.actions, dtype=np.int32)
+                    obs = np.asarray(policy.observations, dtype=np.uint8)
+                    np.save(ep_folder / "actions.npy", actions)
+                    if self.save_images:
+                        for j, img in enumerate(obs):
+                            plt.imsave(ep_folder / f"obs_{j:04d}.png", img)
+                    else:
+                        np.save(ep_folder / "obs.npy", obs)
+
+                    self.metadata["episodes"].append({
+                        "episode": ep,
+                        "seed": seed,
+                        "object": obj_id,
+                        "n_actions": int(actions.shape[0]),
+                        "n_observations": int(obs.shape[0]),
+                    })
+                    self._save_metadata()
+                    print(f"✅ Ep {ep:04d} | Obj {obj_id} | Acts {actions.shape[0]}")
+
+                    self.episode_counter += 1
+
                 env.close()
-
-                if not ok:
-                    raise RuntimeError("Policy returned False")
-
-                actions = np.asarray(policy.actions, dtype=np.int32)
-                obs = np.asarray(policy.observations, dtype=np.uint8)
-
-                ep_folder.mkdir()
-                np.save(ep_folder / "actions.npy", actions)
-                if self.save_images:
-                    for i, img in enumerate(obs):
-                        plt.imsave(ep_folder / f"obs_{i:04d}.png", img)
-                else:
-                    np.save(ep_folder / "obs.npy", obs)
-
-                self.metadata["episodes"].append({
-                    "episode": ep,
-                    "seed": seed,
-                    "n_actions": int(actions.shape[0]),
-                    "n_observations": int(obs.shape[0]),
-                })
-                self._save_metadata()
-
-                print(f"✅ Ep {ep:04d} | acts {actions.shape[0]:3d} | obs {obs.shape[0]:3d}")
-                success += 1
-                self.episode_counter += 1
                 self.seed_counter += 1
 
             except Exception as e:
-                print(f"❌ Ep {ep:04d}, Seed {seed} failed: {e}")
-                # skip this one
+                print(f"❌ Seed {seed} failed: {e}")
                 self.seed_counter += 1
 
-            # finally:
-            #     # always advance both so we never repeat a bad seed or ep index
-            #     self.episode_counter += 1
-            #     self.seed_counter += 1
+           
 
 
 if __name__ == "__main__":
@@ -161,6 +169,8 @@ if __name__ == "__main__":
                         help="Only applies to the very first batch (clears existing data).")
     parser.add_argument("--base_seed", type=int, default=0)
     args = parser.parse_args()
+    print("🔥 Batching logic activated" if args.batch_size else "🧪 Single-run mode")
+
 
     # Driver mode: spawn subprocesses in chunks of --batch_size
     if args.batch_size:
@@ -196,8 +206,9 @@ if __name__ == "__main__":
             with open(md_path) as f:
                 md = json.load(f)
             collected = len(md["episodes"])
-            last_seed = md["episodes"][-1]["seed"]
-            current_seed = last_seed + 1
+            used_seeds = {ep["seed"] for ep in md["episodes"]}
+            current_seed = max(used_seeds) + 1
+
             print(f"🔁 Collected {collected}/{total}, next seed {current_seed}")
 
         print("✅ All done!")
