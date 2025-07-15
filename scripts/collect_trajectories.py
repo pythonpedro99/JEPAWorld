@@ -94,7 +94,8 @@ class CollectTrajectories:
             seed = self.seed_counter
 
             try:
-                env = gym.make(
+                # determine the objects present for this seed by creating a temp env
+                probe_env = gym.make(
                     self.env_id,
                     seed=seed,
                     obs_width=self.OBS_SHAPE[1],
@@ -102,15 +103,14 @@ class CollectTrajectories:
                     domain_rand=True,
                     render_mode="rgb_array",
                 )
-
-                # determine objects present in the environment
-                env.reset(seed=seed)
-                graph_data = get_graph_data(env)
+                probe_env.reset(seed=seed)
+                graph_data = get_graph_data(probe_env)
                 object_nodes: List[str] = [
                     o.node_name
                     for o in graph_data.obstacles
                     if o.type in ("Box", "Ball", "Key")
                 ]
+                probe_env.close()
 
                 for obj in object_nodes:
                     if success >= n_episodes:
@@ -120,47 +120,66 @@ class CollectTrajectories:
                     if ep_folder.exists():
                         raise RuntimeError(f"{ep_folder} already exists")
 
-                    policy = HumanLikeRearrangePolicy(env=env, seed=seed, object_node=obj)
-                    ok = policy.rearrange()
-
-                    if not ok:
-                        raise RuntimeError("Policy returned False")
-
-                    actions = np.asarray(policy.actions, dtype=np.int32)
-                    obs = np.asarray(policy.observations, dtype=np.uint8)
-
-                    ep_folder.mkdir()
-                    np.save(ep_folder / "actions.npy", actions)
-                    if self.save_images:
-                        for i, img in enumerate(obs):
-                            plt.imsave(ep_folder / f"obs_{i:04d}.png", img)
-                    else:
-                        np.save(ep_folder / "obs.npy", obs)
-
-                    self.metadata["episodes"].append({
-                        "episode": ep,
-                        "seed": seed,
-                        "n_actions": int(actions.shape[0]),
-                        "n_observations": int(obs.shape[0]),
-                    })
-                    self._save_metadata()
-
-                    print(
-                        f"✅ Ep {ep:04d} | acts {actions.shape[0]:3d} | obs {obs.shape[0]:3d}"
+                    env = gym.make(
+                        self.env_id,
+                        seed=seed,
+                        obs_width=self.OBS_SHAPE[1],
+                        obs_height=self.OBS_SHAPE[0],
+                        domain_rand=True,
+                        render_mode="rgb_array",
                     )
-                    success += 1
-                    self.episode_counter += 1
-                    ep += 1
 
-                    env.reset(seed=seed)
+                    try:
+                        policy = HumanLikeRearrangePolicy(
+                            env=env,
+                            seed=seed,
+                            object_node=obj,
+                        )
+                        ok = policy.rearrange()
 
-                env.close()
+                        if not ok:
+                            raise RuntimeError("Policy returned False")
+
+                        actions = np.asarray(policy.actions, dtype=np.int32)
+                        obs = np.asarray(policy.observations, dtype=np.uint8)
+
+                        ep_folder.mkdir()
+                        np.save(ep_folder / "actions.npy", actions)
+                        if self.save_images:
+                            for i, img in enumerate(obs):
+                                plt.imsave(ep_folder / f"obs_{i:04d}.png", img)
+                        else:
+                            np.save(ep_folder / "obs.npy", obs)
+
+                        self.metadata["episodes"].append(
+                            {
+                                "episode": ep,
+                                "seed": seed,
+                                "n_actions": int(actions.shape[0]),
+                                "n_observations": int(obs.shape[0]),
+                            }
+                        )
+                        self._save_metadata()
+
+                        print(
+                            f"✅ Ep {ep:04d} | acts {actions.shape[0]:3d} | obs {obs.shape[0]:3d}"
+                        )
+                        success += 1
+                        self.episode_counter += 1
+                        ep += 1
+                    except Exception as e:
+                        print(
+                            f"❌ Ep {ep:04d}, Seed {seed} obj {obj} failed: {e}"
+                        )
+                        # skip just this object/episode
+                    finally:
+                        env.close()
+
                 self.seed_counter += 1
 
             except Exception as e:
-                print(f"❌ Ep {ep:04d}, Seed {seed} failed: {e}")
-                env.close()
-                # skip this one
+                print(f"❌ Seed {seed} setup failed: {e}")
+                # skip this seed entirely
                 self.seed_counter += 1
 
             # finally:
