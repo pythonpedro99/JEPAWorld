@@ -133,6 +133,8 @@ class HumanLikeRearrangePolicy:
             for nid in self.node_pos2d.keys()
             if any(str(nid).startswith(pref) for pref in ("Box", "Ball", "Key"))
         ]
+        print(object_nodes)
+        print(self.object_node)
         n = 1
         if self.object_node is not None:
             if self.object_node not in object_nodes:
@@ -155,6 +157,7 @@ class HumanLikeRearrangePolicy:
 
         DIST_T: float = 2.0
         target0_pos = np.array(self.node_pos2d[targets[0]])
+        print(f"Target position: {target0_pos}")
 
         filtered_sample_nodes = [
             nid
@@ -168,6 +171,7 @@ class HumanLikeRearrangePolicy:
             )
         ]
         if not filtered_sample_nodes:
+            print("No valid sample nodes found for navigation.")
             return False
 
         goal_nodes = self.rng.choice(filtered_sample_nodes, size=n, replace=False).tolist()
@@ -344,6 +348,7 @@ class HumanLikeRearrangePolicy:
                     )
                     no_move_count = no_move_count + 1 if moved < 1e-3 else 0
                     if no_move_count >= 3:
+                        print("xxx")
                         return False
                 else:
                     no_move_count = 0

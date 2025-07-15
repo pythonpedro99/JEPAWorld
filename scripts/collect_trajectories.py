@@ -103,7 +103,7 @@ class CollectTrajectories:
                     domain_rand=True,
                     render_mode="rgb_array",
                 )
-                probe_env.reset(seed=seed)
+                #probe_env.reset(seed=seed)
                 graph_data = get_graph_data(probe_env)
                 object_nodes: List[str] = [
                     o.node_name
