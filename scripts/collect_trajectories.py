@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import argparse
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, List
 
 import gymnasium as gym
 import matplotlib.pyplot as plt
@@ -16,6 +16,7 @@ from gymnasium.envs.registration import register
 # Ensure your project root is on PYTHONPATH so imports work
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from policies.rearrange import HumanLikeRearrangePolicy
+from policies.helpers import get_graph_data
 from Miniworld.miniworld.envs.jeparoom import RearrangeOneRoom
 
 
@@ -93,10 +94,6 @@ class CollectTrajectories:
             seed = self.seed_counter
 
             try:
-                ep_folder = self.episodes_dir / f"ep_{ep:04d}"
-                if ep_folder.exists():
-                    raise RuntimeError(f"{ep_folder} already exists")
-
                 env = gym.make(
                     self.env_id,
                     seed=seed,
@@ -106,39 +103,63 @@ class CollectTrajectories:
                     render_mode="rgb_array",
                 )
 
-                policy = HumanLikeRearrangePolicy(env=env, seed=seed)
-                ok = policy.rearrange()
+                # determine objects present in the environment
+                env.reset(seed=seed)
+                graph_data = get_graph_data(env)
+                object_nodes: List[str] = [
+                    o.node_name
+                    for o in graph_data.obstacles
+                    if o.type in ("Box", "Ball", "Key")
+                ]
+
+                for obj in object_nodes:
+                    if success >= n_episodes:
+                        break
+
+                    ep_folder = self.episodes_dir / f"ep_{ep:04d}"
+                    if ep_folder.exists():
+                        raise RuntimeError(f"{ep_folder} already exists")
+
+                    policy = HumanLikeRearrangePolicy(env=env, seed=seed, object_node=obj)
+                    ok = policy.rearrange()
+
+                    if not ok:
+                        raise RuntimeError("Policy returned False")
+
+                    actions = np.asarray(policy.actions, dtype=np.int32)
+                    obs = np.asarray(policy.observations, dtype=np.uint8)
+
+                    ep_folder.mkdir()
+                    np.save(ep_folder / "actions.npy", actions)
+                    if self.save_images:
+                        for i, img in enumerate(obs):
+                            plt.imsave(ep_folder / f"obs_{i:04d}.png", img)
+                    else:
+                        np.save(ep_folder / "obs.npy", obs)
+
+                    self.metadata["episodes"].append({
+                        "episode": ep,
+                        "seed": seed,
+                        "n_actions": int(actions.shape[0]),
+                        "n_observations": int(obs.shape[0]),
+                    })
+                    self._save_metadata()
+
+                    print(
+                        f"✅ Ep {ep:04d} | acts {actions.shape[0]:3d} | obs {obs.shape[0]:3d}"
+                    )
+                    success += 1
+                    self.episode_counter += 1
+                    ep += 1
+
+                    env.reset(seed=seed)
+
                 env.close()
-
-                if not ok:
-                    raise RuntimeError("Policy returned False")
-
-                actions = np.asarray(policy.actions, dtype=np.int32)
-                obs = np.asarray(policy.observations, dtype=np.uint8)
-
-                ep_folder.mkdir()
-                np.save(ep_folder / "actions.npy", actions)
-                if self.save_images:
-                    for i, img in enumerate(obs):
-                        plt.imsave(ep_folder / f"obs_{i:04d}.png", img)
-                else:
-                    np.save(ep_folder / "obs.npy", obs)
-
-                self.metadata["episodes"].append({
-                    "episode": ep,
-                    "seed": seed,
-                    "n_actions": int(actions.shape[0]),
-                    "n_observations": int(obs.shape[0]),
-                })
-                self._save_metadata()
-
-                print(f"✅ Ep {ep:04d} | acts {actions.shape[0]:3d} | obs {obs.shape[0]:3d}")
-                success += 1
-                self.episode_counter += 1
                 self.seed_counter += 1
 
             except Exception as e:
                 print(f"❌ Ep {ep:04d}, Seed {seed} failed: {e}")
+                env.close()
                 # skip this one
                 self.seed_counter += 1
 

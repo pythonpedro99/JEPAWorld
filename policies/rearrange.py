@@ -1,5 +1,5 @@
 import math
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 import numpy as np
 import gymnasium as gym
 import networkx as nx
@@ -19,6 +19,7 @@ class HumanLikeRearrangePolicy:
         self,
         env: gym.Env,
         seed: int = 0,
+        object_node: Optional[str] = None,
     ) -> None:
         '''
         Initialize the rearrangement policy.
@@ -29,12 +30,17 @@ class HumanLikeRearrangePolicy:
             The Gymnasium environment to interact with.
         seed : int, optional
             Seed for reproducible randomness, by default 0.
+        object_node : Optional[str], optional
+            Name of the object node to rearrange. If ``None`` a random
+            object will be chosen.
         '''
         self.observations: List[np.ndarray] = []
         self.actions: List[int] = []
         self.env = env
         self.rng = np.random.default_rng(seed)
-        obs, _ = self.env.reset()
+        self.seed = seed
+        self.object_node = object_node
+        obs, _ = self.env.reset(seed=seed)
         self.agent_start_pos = (
             self.env.unwrapped.agent.pos[0],
             self.env.unwrapped.agent.pos[2],
@@ -125,10 +131,15 @@ class HumanLikeRearrangePolicy:
         object_nodes = [
             nid
             for nid in self.node_pos2d.keys()
-            if any(str(nid).startswith(pref) for pref in ('Box', 'Ball', 'Key'))
+            if any(str(nid).startswith(pref) for pref in ("Box", "Ball", "Key"))
         ]
         n = 1
-        targets = list(self.rng.choice(object_nodes, size=n, replace=False))
+        if self.object_node is not None:
+            if self.object_node not in object_nodes:
+                return False
+            targets = [self.object_node]
+        else:
+            targets = list(self.rng.choice(object_nodes, size=n, replace=False))
 
         room_verts = self.graph_data.room.vertices
         xs, zs = zip(*room_verts)
