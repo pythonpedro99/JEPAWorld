@@ -69,16 +69,15 @@ cd ..
 ```
 
 **Start data collection** by activating the environment and running the
-`collect_trajectories.py` script. Below are examples for both single-run and
-driver modes.
+`collect_trajectories.py` script.
 
 ```bash
 source .venv/bin/activate
 python scripts/collect_trajectories.py \
   --env_id RearrangeOneRoom-v0 \
-  --n_episodes 2000 \
+  --n_episodes 10000 \
   --batch_size 30 \
-  --output_dir data/test_episodes
+  --output_dir '/Users/julianquast/Documents/Bachelor Thesis/Datasets/rearrange_10k_v1'
 ```
 
 > 💡 On **macOS**, use driver mode and set `--batch_size <= 30` to avoid pyglet issues. The script supports resumable collection — appending new episodes automatically.

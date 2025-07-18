@@ -19,6 +19,7 @@ class HumanLikeRearrangePolicy:
         self,
         env: gym.Env,
         seed: int = 0,
+        target: List[str]= [],
     ) -> None:
         '''
         Initialize the rearrangement policy.
@@ -33,8 +34,9 @@ class HumanLikeRearrangePolicy:
         self.observations: List[np.ndarray] = []
         self.actions: List[int] = []
         self.env = env
+        self.target = target
         self.rng = np.random.default_rng(seed)
-        obs, _ = self.env.reset()
+        obs, _ = self.env.reset(seed=seed)
         self.agent_start_pos = (
             self.env.unwrapped.agent.pos[0],
             self.env.unwrapped.agent.pos[2],
@@ -128,7 +130,8 @@ class HumanLikeRearrangePolicy:
             if any(str(nid).startswith(pref) for pref in ('Box', 'Ball', 'Key'))
         ]
         n = 1
-        targets = list(self.rng.choice(object_nodes, size=n, replace=False))
+        #targets = list(self.rng.choice(object_nodes, size=n, replace=False))
+        targets = self.target
 
         room_verts = self.graph_data.room.vertices
         xs, zs = zip(*room_verts)
