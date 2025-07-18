@@ -87,7 +87,8 @@ class CollectTrajectories:
             json.dump(self.metadata, f, indent=2)
 
     def _collect_loop(self, n_episodes: int) -> None:
-        while self.episode_counter < self.episode_counter + n_episodes:
+        target_seed = self.seed_counter + n_episodes
+        while self.seed_counter < target_seed:
             seed = self.seed_counter
 
             try:
